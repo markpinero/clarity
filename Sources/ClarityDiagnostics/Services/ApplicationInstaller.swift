@@ -31,10 +31,11 @@ enum ApplicationInstaller {
         withIntermediateDirectories: true,
         attributes: [.posixPermissions: 0o755]
       )
-      guard !fileManager.fileExists(atPath: destination.path) else {
-        throw InstallerError.destinationExists(destination)
+      if fileManager.fileExists(atPath: destination.path) {
+        guard confirmReplacement(destination: destination) else { return }
       }
-      try fileManager.moveItem(at: bundleURL, to: destination)
+      try ApplicationBundleInstaller.install(
+        bundleAt: bundleURL, to: destination, using: fileManager)
       showMoveSuccess(destination: destination)
     } catch {
       showMoveFailure(error: error)
@@ -57,6 +58,17 @@ enum ApplicationInstaller {
     alert.runModal()
   }
 
+  private static func confirmReplacement(destination: URL) -> Bool {
+    let alert = NSAlert()
+    alert.messageText = "Replace the installed copy?"
+    alert.informativeText =
+      "Clarity is already installed at \(destination.path). Replace it with this copy?"
+    alert.alertStyle = .warning
+    alert.addButton(withTitle: "Replace")
+    alert.addButton(withTitle: "Not Now")
+    return alert.runModal() == .alertFirstButtonReturn
+  }
+
   private static func showMoveFailure(error: Error) {
     let applications = ApplicationInstallationLocation.systemApplicationsDirectory
     let alert = NSAlert()
@@ -69,17 +81,6 @@ enum ApplicationInstaller {
 
     if alert.runModal() == .alertFirstButtonReturn {
       NSWorkspace.shared.open(applications)
-    }
-  }
-
-  private enum InstallerError: LocalizedError {
-    case destinationExists(URL)
-
-    var errorDescription: String? {
-      switch self {
-      case .destinationExists(let destination):
-        "An installed copy already exists at \(destination.path)."
-      }
     }
   }
 }
