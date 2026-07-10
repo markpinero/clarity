@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run tests
+        run: swift test
+
+      - name: Build release artifact
+        run: ./script/build_and_run.sh --release
+
+      - name: Verify release bundle
+        run: |
+          codesign --verify --deep --strict dist/release/Clarity.app
+          plutil -extract CFBundleIdentifier raw dist/release/Clarity.app/Contents/Info.plist
+          test -s dist/release/Clarity.zip
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Clarity-macos
+          path: dist/release/Clarity.zip
+          if-no-files-found: error

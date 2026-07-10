@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  signed-notarized-release:
+    runs-on: macos-14
+    env:
+      APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate signing and notarization secrets
+        shell: bash
+        run: |
+          for name in \
+            APPLE_CERTIFICATE_P12_BASE64 \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_SIGNING_IDENTITY \
+            APPLE_KEYCHAIN_PASSWORD \
+            APPLE_ID \
+            APPLE_APP_SPECIFIC_PASSWORD \
+            APPLE_TEAM_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing required GitHub secret: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Import Developer ID certificate
+        shell: bash
+        run: |
+          certificate="$RUNNER_TEMP/clarity-certificate.p12"
+          keychain="$RUNNER_TEMP/clarity-signing.keychain-db"
+          printf %s "$APPLE_CERTIFICATE_P12_BASE64" | base64 -D > "$certificate"
+          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
+          security import "$certificate" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security list-keychain -d user -s "$keychain"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
+
+      - name: Test
+        run: swift test
+
+      - name: Build signed release
+        env:
+          CLARITY_CODESIGN_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
+          CLARITY_RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          CLARITY_RELEASE_VERSION="${CLARITY_RELEASE_VERSION#v}" \
+            ./script/build_and_run.sh --release
+
+      - name: Notarize and staple
+        shell: bash
+        run: |
+          xcrun notarytool submit dist/release/Clarity.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple dist/release/Clarity.app
+          rm dist/release/Clarity.zip
+          ditto -c -k --sequesterRsrc --keepParent \
+            dist/release/Clarity.app \
+            "dist/release/Clarity-${GITHUB_REF_NAME}.zip"
+          spctl --assess --type execute --verbose=4 dist/release/Clarity.app
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "dist/release/Clarity-${GITHUB_REF_NAME}.zip" \
+            --generate-notes \
+            --title "Clarity $GITHUB_REF_NAME"
+
+      - name: Remove temporary keychain
+        if: ${{ always() }}
+        run: security delete-keychain "$RUNNER_TEMP/clarity-signing.keychain-db" || true

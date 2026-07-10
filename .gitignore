@@ -1,0 +1,10 @@
+.DS_Store
+.build/
+dist/
+.codex/
+.vscode/
+data/
+Tools/
+script/legacy_iris_light_oracle.sh
+docs/*
+!docs/releasing.md
