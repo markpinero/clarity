@@ -3,9 +3,35 @@ import ClarityBreaks
 import Observation
 import SwiftUI
 
+struct BreakOverlayPresentationTransition: Equatable {
+  var shouldBeginBreakPresentation = false
+  var shouldEndBreakPresentation = false
+}
+
+struct BreakOverlayPresentationState {
+  enum Mode {
+    case none
+    case countdown
+    case breakOverlay
+  }
+
+  private(set) var mode = Mode.none
+
+  mutating func transition(to nextMode: Mode) -> BreakOverlayPresentationTransition {
+    guard mode != nextMode else { return BreakOverlayPresentationTransition() }
+    let transition = BreakOverlayPresentationTransition(
+      shouldBeginBreakPresentation: nextMode == .breakOverlay,
+      shouldEndBreakPresentation: mode == .breakOverlay
+    )
+    mode = nextMode
+    return transition
+  }
+}
+
 @MainActor
 final class BreakOverlayPresenter {
   private let model = BreakOverlayModel()
+  private var presentationState = BreakOverlayPresentationState()
   private var panels: [NSPanel] = []
   private var globalEmergencyEscapeMonitor: Any?
   private var localEmergencyEscapeMonitor: Any?
@@ -20,7 +46,7 @@ final class BreakOverlayPresenter {
     onSnooze: @escaping () -> Void,
     onSkip: @escaping () -> Void
   ) {
-    dismiss()
+    transition(to: .countdown)
     configure(
       snapshot: snapshot,
       now: now,
@@ -64,7 +90,7 @@ final class BreakOverlayPresenter {
     onSkip: @escaping () -> Void,
     onEmergencyEscape: @escaping () -> Void
   ) {
-    dismiss()
+    transition(to: .breakOverlay)
     configure(
       snapshot: snapshot,
       now: now,
@@ -74,7 +100,6 @@ final class BreakOverlayPresenter {
       onSkip: onSkip
     )
 
-    beginBreakPresentation()
     panels = NSScreen.screens.map { screen in
       let panel = makePanel(
         frame: screen.frame,
@@ -110,12 +135,22 @@ final class BreakOverlayPresenter {
   }
 
   func dismiss() {
+    transition(to: .none)
+  }
+
+  private func transition(to mode: BreakOverlayPresentationState.Mode) {
+    let transition = presentationState.transition(to: mode)
     removeEmergencyEscapeMonitors()
-    endBreakPresentation()
+    if transition.shouldEndBreakPresentation {
+      endBreakPresentation()
+    }
     for panel in panels {
       panel.orderOut(nil)
     }
     panels.removeAll()
+    if transition.shouldBeginBreakPresentation {
+      beginBreakPresentation()
+    }
   }
 
   private func configure(
