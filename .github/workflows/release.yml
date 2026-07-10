@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   signed-notarized-release:
-    runs-on: macos-14
+    runs-on: macos-26
     env:
       APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -52,7 +52,10 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
 
       - name: Test
-        run: swift test
+        run: |
+          swift --version
+          swift --version | grep -Eq 'Swift version (6\.[2-9]|[7-9]\.)'
+          swift test
 
       - name: Build signed release
         env:
