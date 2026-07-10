@@ -3,6 +3,7 @@ import Foundation
 public struct BreakConfiguration: Codable, Equatable, Sendable {
   public static let preBreakNotificationDuration: TimeInterval = 10
 
+  public var isEnabled: Bool
   public var focusDuration: TimeInterval
   public var shortBreakDuration: TimeInterval
   public var longBreakDuration: TimeInterval
@@ -18,6 +19,7 @@ public struct BreakConfiguration: Codable, Equatable, Sendable {
   public var pauseDuringScreenSharing: Bool
 
   public init(
+    isEnabled: Bool = true,
     focusDuration: TimeInterval,
     shortBreakDuration: TimeInterval,
     longBreakDuration: TimeInterval,
@@ -32,6 +34,7 @@ public struct BreakConfiguration: Codable, Equatable, Sendable {
     pauseDuringGaming: Bool = true,
     pauseDuringScreenSharing: Bool = true
   ) {
+    self.isEnabled = isEnabled
     self.focusDuration = max(1, focusDuration)
     self.shortBreakDuration = max(1, shortBreakDuration)
     self.longBreakDuration = max(1, longBreakDuration)
@@ -57,6 +60,7 @@ public struct BreakConfiguration: Codable, Equatable, Sendable {
   )
 
   private enum CodingKeys: String, CodingKey {
+    case isEnabled
     case focusDuration
     case shortBreakDuration
     case longBreakDuration
@@ -75,6 +79,7 @@ public struct BreakConfiguration: Codable, Equatable, Sendable {
   public init(from decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     self.init(
+      isEnabled: try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true,
       focusDuration: try container.decode(TimeInterval.self, forKey: .focusDuration),
       shortBreakDuration: try container.decode(TimeInterval.self, forKey: .shortBreakDuration),
       longBreakDuration: try container.decode(TimeInterval.self, forKey: .longBreakDuration),

@@ -464,6 +464,19 @@ struct SettingsView: View {
 
   private var breakSettings: some View {
     Form {
+      Section("Break Reminders") {
+        Toggle(
+          "Enabled",
+          isOn: Binding(
+            get: { store.breakController.isEnabled },
+            set: { store.breakController.setEnabled($0) }
+          )
+        )
+        Text("Turn off all break timers and reminders without changing your schedule.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
       Section("Timer") {
         Picker(
           "Focus interval",
@@ -521,6 +534,7 @@ struct SettingsView: View {
           }
         }
       }
+      .disabled(!store.breakController.isEnabled)
 
       Section("Focused Screen Time") {
         Toggle(
@@ -554,6 +568,7 @@ struct SettingsView: View {
           value: Self.duration(Int(store.breakController.contextMonitor.observation.idleDuration))
         )
       }
+      .disabled(!store.breakController.isEnabled)
 
       Section("Smart Pause") {
         smartPauseToggle(
@@ -565,6 +580,7 @@ struct SettingsView: View {
         smartPauseToggle("Full-screen games", value: \.pauseDuringGaming)
         smartPauseToggle("Screen recording or sharing", value: \.pauseDuringScreenSharing)
       }
+      .disabled(!store.breakController.isEnabled)
 
       Section("Context Permissions") {
         contextPermissionRow(
@@ -610,6 +626,7 @@ struct SettingsView: View {
           }
         }
       }
+      .disabled(!store.breakController.isEnabled)
 
       Section("Current State") {
         LabeledContent("Status", value: store.breakController.phaseLabel)
@@ -624,23 +641,25 @@ struct SettingsView: View {
           }
         }
 
-        HStack {
-          if store.breakController.snapshot.phase == .stopped {
-            Button("Start Break") {
-              store.breakController.startBreakNow()
+        if store.breakController.isEnabled {
+          HStack {
+            if store.breakController.snapshot.phase == .stopped {
+              Button("Start Break") {
+                store.breakController.startBreakNow()
+              }
+              .buttonStyle(.borderedProminent)
+            } else {
+              Button(store.breakController.isManuallyPaused ? "Resume" : "Pause") {
+                store.breakController.togglePause()
+              }
+              Button("Stop") {
+                store.breakController.stopCycle()
+              }
             }
-            .buttonStyle(.borderedProminent)
-          } else {
-            Button(store.breakController.isManuallyPaused ? "Resume" : "Pause") {
-              store.breakController.togglePause()
-            }
-            Button("Stop") {
-              store.breakController.stopCycle()
-            }
-          }
 
-          Button("Reset Cycle") {
-            store.breakController.reset()
+            Button("Reset Cycle") {
+              store.breakController.reset()
+            }
           }
         }
       }

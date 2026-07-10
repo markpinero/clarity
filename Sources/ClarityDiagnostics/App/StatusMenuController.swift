@@ -15,6 +15,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
   private var profileItems: [NSMenuItem] = []
   private var pauseItem: NSMenuItem!
   private var resetColorsItem: NSMenuItem!
+  private var breaksEnabledItem: NSMenuItem!
   private var breakStatusItem: NSMenuItem!
   private var startBreakItem: NSMenuItem!
   private var startFocusItem: NSMenuItem!
@@ -81,6 +82,9 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     menu.addItem(resetColorsItem)
 
     menu.addItem(.separator())
+
+    breaksEnabledItem = actionItem("Break Reminders", #selector(toggleBreaksEnabled))
+    menu.addItem(breaksEnabledItem)
 
     breakStatusItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     breakStatusItem.isEnabled = false
@@ -169,11 +173,16 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     let controller = store.breakController
     let phase = controller.snapshot.phase
+    breaksEnabledItem.state = controller.isEnabled ? .on : .off
     breakStatusItem.title = "Breaks · \(controller.phaseLabel)"
-    startBreakItem.isHidden = ![.stopped, .focusing, .countdown].contains(phase)
-    startFocusItem.isHidden = phase != .stopped
-    resetFocusItem.isHidden = ![.focusing, .countdown, .paused].contains(phase)
-    pauseBreaksItem.isHidden = phase == .stopped
+    startBreakItem.isHidden =
+      !controller.isEnabled
+      || ![.stopped, .focusing, .countdown].contains(phase)
+    startFocusItem.isHidden = !controller.isEnabled || phase != .stopped
+    resetFocusItem.isHidden =
+      !controller.isEnabled
+      || ![.focusing, .countdown, .paused].contains(phase)
+    pauseBreaksItem.isHidden = !controller.isEnabled || phase == .stopped
     pauseBreaksItem.title = controller.isManuallyPaused ? "Resume Breaks" : "Pause Breaks"
     pauseBreaksItem.isEnabled = phase != .paused || controller.isManuallyPaused
 
@@ -185,7 +194,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     let canSnoozeOrSkip = [.countdown, .breaking].contains(phase)
     snoozeItem.isHidden = !canSnoozeOrSkip
     skipItem.isHidden = !canSnoozeOrSkip
-    stopBreakTimerItem.isHidden = phase == .stopped
+    stopBreakTimerItem.isHidden = !controller.isEnabled || phase == .stopped
   }
 
   private var statusText: String {
@@ -215,6 +224,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
   @objc private func resetColors() {
     store.reset()
+  }
+
+  @objc private func toggleBreaksEnabled() {
+    let controller = store.breakController
+    controller.setEnabled(!controller.isEnabled)
   }
 
   @objc private func startBreakNow() {

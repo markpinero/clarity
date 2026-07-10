@@ -201,40 +201,51 @@ struct OverviewView: View {
 
         Spacer()
 
-        switch store.breakController.snapshot.phase {
-        case .stopped:
-          Button("Start Break Timer") {
-            store.breakController.startCycle()
-          }
-          .buttonStyle(.borderedProminent)
-        case .paused:
-          if store.breakController.isManuallyPaused {
-            Button("Resume") {
+        Toggle(
+          "Enabled",
+          isOn: Binding(
+            get: { store.breakController.isEnabled },
+            set: { store.breakController.setEnabled($0) }
+          )
+        )
+        .toggleStyle(.switch)
+
+        if store.breakController.isEnabled {
+          switch store.breakController.snapshot.phase {
+          case .stopped:
+            Button("Start Break Timer") {
+              store.breakController.startCycle()
+            }
+            .buttonStyle(.borderedProminent)
+          case .paused:
+            if store.breakController.isManuallyPaused {
+              Button("Resume") {
+                store.breakController.togglePause()
+              }
+            } else if let reason = store.breakController.activePauseReasons.first {
+              Text(reason.name)
+                .foregroundStyle(.secondary)
+            }
+            Button("Stop") {
+              store.breakController.stopCycle()
+            }
+          case .countdown, .breaking:
+            Button("Snooze") {
+              store.breakController.snooze()
+            }
+            Button("Skip") {
+              store.breakController.skip()
+            }
+            Button("Pause") {
               store.breakController.togglePause()
             }
-          } else if let reason = store.breakController.activePauseReasons.first {
-            Text(reason.name)
-              .foregroundStyle(.secondary)
-          }
-          Button("Stop") {
-            store.breakController.stopCycle()
-          }
-        case .countdown, .breaking:
-          Button("Snooze") {
-            store.breakController.snooze()
-          }
-          Button("Skip") {
-            store.breakController.skip()
-          }
-          Button("Pause") {
-            store.breakController.togglePause()
-          }
-        case .focusing:
-          Button("Pause") {
-            store.breakController.togglePause()
-          }
-          Button("Stop") {
-            store.breakController.stopCycle()
+          case .focusing:
+            Button("Pause") {
+              store.breakController.togglePause()
+            }
+            Button("Stop") {
+              store.breakController.stopCycle()
+            }
           }
         }
       }

@@ -10,8 +10,11 @@ final class BreakController {
   private(set) var now = Date()
   private(set) var lastError: String?
 
+  var isEnabled: Bool { configuration.isEnabled }
+
   var phaseLabel: String {
-    switch snapshot.phase {
+    guard isEnabled else { return "Breaks Disabled" }
+    return switch snapshot.phase {
     case .stopped: "Breaks Off"
     case .focusing: "Focus"
     case .countdown: "Break Soon"
@@ -60,7 +63,10 @@ final class BreakController {
     guard timer == nil else { return }
     let now = Date()
     self.now = now
-    let effects = BreakReducer.recover(&snapshot, now: now, configuration: configuration)
+    let effects =
+      isEnabled
+      ? BreakReducer.recover(&snapshot, now: now, configuration: configuration)
+      : BreakReducer.reduce(&snapshot, event: .stop, configuration: configuration)
     process(effects)
     if !effects.contains(.presentCountdown), !effects.contains(.presentBreak) {
       presentCurrentOverlay()
@@ -100,12 +106,19 @@ final class BreakController {
   }
 
   func startCycle() {
+    guard isEnabled else { return }
     send(.start(.now))
     applyContext(contextMonitor.observation)
   }
-  func startBreakNow() { send(.startBreak(.now)) }
+  func startBreakNow() {
+    guard isEnabled else { return }
+    send(.startBreak(.now))
+  }
   func stopCycle() { send(.stop) }
-  func reset() { send(.reset) }
+  func reset() {
+    guard isEnabled else { return }
+    send(.reset)
+  }
   func snooze() { send(.snooze(.now)) }
   func skip() { send(.skip(.now)) }
 
@@ -121,9 +134,19 @@ final class BreakController {
     contextMonitor.requestContextPermission(permission)
   }
 
+  func setEnabled(_ isEnabled: Bool) {
+    guard configuration.isEnabled != isEnabled else { return }
+    configuration.isEnabled = isEnabled
+    if !isEnabled {
+      send(.stop)
+    }
+    persist()
+  }
+
   func updateConfiguration(_ update: (inout BreakConfiguration) -> Void) {
     update(&configuration)
     configuration = BreakConfiguration(
+      isEnabled: configuration.isEnabled,
       focusDuration: configuration.focusDuration,
       shortBreakDuration: configuration.shortBreakDuration,
       longBreakDuration: configuration.longBreakDuration,

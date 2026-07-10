@@ -339,6 +339,7 @@ final class BreakReducerTests: XCTestCase {
 
     let decoded = try JSONDecoder().decode(BreakConfiguration.self, from: data)
 
+    XCTAssertTrue(decoded.isEnabled)
     XCTAssertTrue(decoded.idleResetEnabled)
     XCTAssertEqual(decoded.idleResetDuration, 5 * 60)
     XCTAssertTrue(decoded.pauseDuringCalendarMeetings)
