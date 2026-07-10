@@ -113,7 +113,6 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     menu.addItem(.separator())
 
     menu.addItem(actionItem("Open Clarity", #selector(openClarity)))
-    menu.addItem(actionItem("Settings…", #selector(openSettings)))
 
     menu.addItem(.separator())
     menu.addItem(actionItem("Quit Clarity Completely", #selector(quitClarity)))
@@ -243,18 +242,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
   }
 
   @objc private func openClarity() {
-    if let window = NSApp.windows.first(where: { $0.title == "Clarity" && !($0 is NSPanel) }) {
+    if let window = NSApp.windows.first(where: { !($0 is NSPanel) && $0.canBecomeKey }) {
       window.makeKeyAndOrderFront(nil)
     } else {
-      performMainMenuItem(titled: "New Clarity Window")
-    }
-    NSApp.activate(ignoringOtherApps: true)
-  }
-
-  @objc private func openSettings() {
-    let didOpen = NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-    if !didOpen {
-      performMainMenuItem(titled: "Settings…")
+      performMainMenuItem(titled: "Open Clarity")
     }
     NSApp.activate(ignoringOtherApps: true)
   }

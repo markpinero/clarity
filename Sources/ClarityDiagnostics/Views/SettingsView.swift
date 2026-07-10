@@ -3,45 +3,76 @@ import ClarityCore
 import SwiftUI
 
 struct SettingsView: View {
+  private enum Tab: Hashable {
+    case overview
+    case schedule
+    case displays
+    case general
+    case breaks
+    case automation
+    case safety
+  }
+
+  @Environment(\.scenePhase) private var scenePhase
   @Bindable var store: ClarityStore
+  @State private var selectedTab = Tab.overview
   @State private var ruleBundleIdentifier = ""
   @State private var ruleDisplayName = ""
   @State private var ruleAction = ActiveAppAction.pause
 
   var body: some View {
-    TabView {
+    TabView(selection: $selectedTab) {
+      OverviewView(
+        store: store,
+        onOpenSchedule: { selectedTab = .schedule }
+      )
+      .tabItem {
+        Label("Overview", systemImage: "rectangle.grid.2x2")
+      }
+      .tag(Tab.overview)
+
       scheduleSettings
         .tabItem {
           Label("Schedule", systemImage: "clock")
         }
+        .tag(Tab.schedule)
 
       displaySettings
         .tabItem {
           Label("Displays", systemImage: "display.2")
         }
+        .tag(Tab.displays)
 
       generalSettings
         .tabItem {
           Label("General", systemImage: "gearshape")
         }
+        .tag(Tab.general)
 
       breakSettings
         .tabItem {
           Label("Breaks", systemImage: "eye")
         }
+        .tag(Tab.breaks)
 
       automationSettings
         .tabItem {
           Label("Automation", systemImage: "bolt.badge.clock")
         }
+        .tag(Tab.automation)
 
       safetySettings
         .tabItem {
           Label("Safety", systemImage: "shield.checkered")
         }
+        .tag(Tab.safety)
     }
-    .frame(width: 620, height: 520)
+    .frame(width: 720, height: 600)
     .scenePadding()
+    .onChange(of: scenePhase) { _, newPhase in
+      guard newPhase == .active else { return }
+      store.breakController.contextMonitor.refreshPermissionState()
+    }
   }
 
   private var scheduleSettings: some View {
@@ -549,6 +580,16 @@ struct SettingsView: View {
           state: store.breakController.contextMonitor.screenRecordingPermission
         )
         LabeledContent("Camera and microphone", value: "Metadata only")
+
+        HStack {
+          Label("Checked automatically while Clarity is running", systemImage: "arrow.clockwise")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          Spacer()
+          Button("Check Permissions") {
+            store.breakController.contextMonitor.refreshPermissionState()
+          }
+        }
       }
 
       Section("Actions") {
@@ -612,6 +653,9 @@ struct SettingsView: View {
       }
     }
     .formStyle(.grouped)
+    .onAppear {
+      store.breakController.contextMonitor.refreshPermissionState()
+    }
   }
 
   private func contextPermissionRow(
@@ -619,7 +663,9 @@ struct SettingsView: View {
     state: ContextPermissionState
   ) -> some View {
     HStack {
-      LabeledContent(permissionTitle(permission), value: state.rawValue)
+      LabeledContent(permissionTitle(permission)) {
+        permissionStatus(state)
+      }
       Spacer()
       switch ContextPermissionPlan.action(for: state) {
       case .requestSystemPermission:
@@ -633,6 +679,24 @@ struct SettingsView: View {
       case .none:
         EmptyView()
       }
+    }
+  }
+
+  @ViewBuilder
+  private func permissionStatus(_ state: ContextPermissionState) -> some View {
+    switch state {
+    case .granted:
+      Label("Allowed", systemImage: "checkmark.circle.fill")
+        .foregroundStyle(.green)
+    case .notDetermined:
+      Label(state.rawValue, systemImage: "questionmark.circle")
+        .foregroundStyle(.secondary)
+    case .denied, .restricted:
+      Label(state.rawValue, systemImage: "exclamationmark.triangle.fill")
+        .foregroundStyle(.orange)
+    case .notRequired:
+      Label(state.rawValue, systemImage: "checkmark.circle")
+        .foregroundStyle(.secondary)
     }
   }
 

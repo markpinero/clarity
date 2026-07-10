@@ -9,10 +9,12 @@ struct ClarityApp: App {
 
   var body: some Scene {
     WindowGroup("Clarity", id: "control") {
-      ContentView(store: store)
+      SettingsView(store: store)
     }
-    .defaultSize(width: 760, height: 620)
+    .defaultSize(width: 760, height: 728)
     .commands {
+      ClarityWindowCommands()
+
       CommandGroup(replacing: .appTermination) {
         Button("Keep Clarity in Menu Bar") {
           store.moveToMenuBarOnly()
@@ -47,10 +49,35 @@ struct ClarityApp: App {
         .keyboardShortcut("r", modifiers: [.command, .shift])
       }
     }
+  }
+}
 
-    Settings {
-      SettingsView(store: store)
+private struct ClarityWindowCommands: Commands {
+  @Environment(\.openWindow) private var openWindow
+
+  var body: some Commands {
+    CommandGroup(replacing: .newItem) {
+      Button("Open Clarity") {
+        showClarityWindow()
+      }
+      .keyboardShortcut("n")
     }
+
+    CommandGroup(replacing: .appSettings) {
+      Button("Settings…") {
+        showClarityWindow()
+      }
+      .keyboardShortcut(",")
+    }
+  }
+
+  private func showClarityWindow() {
+    if let window = NSApp.windows.first(where: { !($0 is NSPanel) && $0.canBecomeKey }) {
+      window.makeKeyAndOrderFront(nil)
+    } else {
+      openWindow(id: "control")
+    }
+    NSApp.activate(ignoringOtherApps: true)
   }
 }
 

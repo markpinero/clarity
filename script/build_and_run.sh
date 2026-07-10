@@ -123,7 +123,12 @@ stage_app_bundle() {
 PLIST
 
   if [[ "$CODESIGN_IDENTITY" == "-" ]]; then
-    /usr/bin/codesign --force --sign - --entitlements "$ENTITLEMENTS_PLIST" "$APP_BUNDLE" >/dev/null
+    /usr/bin/codesign \
+      --force \
+      --sign - \
+      --requirements "=designated => identifier \"$BUNDLE_ID\"" \
+      --entitlements "$ENTITLEMENTS_PLIST" \
+      "$APP_BUNDLE" >/dev/null
   else
     /usr/bin/codesign \
       --force \

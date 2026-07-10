@@ -2,8 +2,9 @@ import ClarityBreaks
 import ClarityCore
 import SwiftUI
 
-struct ContentView: View {
+struct OverviewView: View {
   @Bindable var store: ClarityStore
+  let onOpenSchedule: () -> Void
   @State private var showsDiagnostics = false
 
   var body: some View {
@@ -33,7 +34,6 @@ struct ContentView: View {
       }
       .padding(24)
     }
-    .frame(minWidth: 680, minHeight: 560)
   }
 
   private var header: some View {
@@ -139,7 +139,7 @@ struct ContentView: View {
 
           Spacer()
 
-          SettingsLink {
+          Button(action: onOpenSchedule) {
             Label("Edit Schedule", systemImage: "gearshape")
           }
         }
@@ -176,10 +176,6 @@ struct ContentView: View {
       .disabled(!store.isEnabled && store.driverMode == .idle)
 
       Spacer()
-
-      SettingsLink {
-        Label("Settings", systemImage: "gearshape")
-      }
 
       Button("Refresh Displays") {
         store.refreshDisplays(reason: "Manual refresh", forceApply: true)

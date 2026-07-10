@@ -20,10 +20,10 @@ final class BreakContextMonitor {
   var onChange: ((BreakContextObservation) -> Void)?
 
   private let eventStore = EKEventStore()
+  private let permissionRequestHistory = ContextPermissionRequestHistory()
   private var timer: Timer?
   private var cachedCalendarMeeting = false
   private var lastCalendarScan = Date.distantPast
-  private var requestedPermissions = Set<ContextPermission>()
 
   func start() {
     guard timer == nil else { return }
@@ -45,7 +45,7 @@ final class BreakContextMonitor {
     refreshPermissionState()
     switch ContextPermissionPlan.action(for: permissionState(for: permission)) {
     case .requestSystemPermission:
-      requestedPermissions.insert(permission)
+      permissionRequestHistory.markRequested(permission)
       NSApp.activate(ignoringOtherApps: true)
       requestSystemPermission(permission)
     case .openSystemSettings:
@@ -106,7 +106,7 @@ final class BreakContextMonitor {
     permission: ContextPermission
   ) -> ContextPermissionState {
     if isGranted { return .granted }
-    return requestedPermissions.contains(permission) ? .denied : .notDetermined
+    return permissionRequestHistory.contains(permission) ? .denied : .notDetermined
   }
 
   private func openSystemSettings(for permission: ContextPermission) {
