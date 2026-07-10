@@ -48,15 +48,6 @@ struct ClarityApp: App {
       }
     }
 
-    MenuBarExtra {
-      MenuBarView(store: store)
-    } label: {
-      Label(
-        store.menuBarTitle,
-        systemImage: store.isEnabled && !store.isPaused ? "sun.horizon.fill" : "sun.horizon"
-      )
-    }
-
     Settings {
       SettingsView(store: store)
     }
@@ -66,6 +57,7 @@ struct ClarityApp: App {
 @MainActor
 private final class AppDelegate: NSObject, NSApplicationDelegate {
   private var instanceLock: SingleInstanceLock?
+  private var statusMenuController: StatusMenuController?
   private var isPrimaryInstance = false
 
   func applicationWillFinishLaunching(_ notification: Notification) {
@@ -88,6 +80,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ notification: Notification) {
     guard isPrimaryInstance else { return }
     ClarityStore.shared.applyAppVisibility()
+    statusMenuController = StatusMenuController(store: ClarityStore.shared)
     ApplicationInstaller.promptToMoveIfNeeded()
     ClarityStore.shared.start()
     NSApp.activate(ignoringOtherApps: true)

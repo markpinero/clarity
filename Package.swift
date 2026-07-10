@@ -48,5 +48,9 @@ let package = Package(
       name: "ClarityBreaksTests",
       dependencies: ["ClarityBreaks"]
     ),
+    .testTarget(
+      name: "ClarityDiagnosticsTests",
+      dependencies: ["ClarityDiagnostics"]
+    ),
   ]
 )

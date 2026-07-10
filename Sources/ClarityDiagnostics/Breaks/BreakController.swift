@@ -58,7 +58,8 @@ final class BreakController {
 
   func startRuntime() {
     guard timer == nil else { return }
-    now = .now
+    let now = Date()
+    self.now = now
     let effects = BreakReducer.recover(&snapshot, now: now, configuration: configuration)
     process(effects)
     if !effects.contains(.presentCountdown), !effects.contains(.presentBreak) {
@@ -142,12 +143,20 @@ final class BreakController {
   }
 
   private func tick() {
-    now = .now
+    tick(at: .now)
+  }
+
+  func tick(at now: Date) {
+    self.now = now
+    var nextSnapshot = snapshot
     let effects = BreakReducer.reduce(
-      &snapshot,
+      &nextSnapshot,
       event: .tick(now),
       configuration: configuration
     )
+    if nextSnapshot != snapshot {
+      snapshot = nextSnapshot
+    }
     process(effects)
     if [.countdown, .breaking].contains(snapshot.phase) {
       presenter.update(snapshot: snapshot, now: now)
