@@ -1,7 +1,7 @@
 import AppKit
 import ClarityBreaks
 import ClarityCore
-import Observation
+import Combine
 
 @MainActor
 final class StatusMenuController: NSObject, NSMenuDelegate {
@@ -25,6 +25,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
   private var snoozeItem: NSMenuItem!
   private var skipItem: NSMenuItem!
   private var stopBreakTimerItem: NSMenuItem!
+  private var statusButtonObservation: AnyCancellable?
 
   init(store: ClarityStore) {
     self.store = store
@@ -143,15 +144,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
   }
 
   private func observeStatusButton() {
-    withObservationTracking {
-      _ = store.menuBarTitle
-      _ = store.isEnabled
-      _ = store.isPaused
-    } onChange: { [weak self] in
+    statusButtonObservation = store.objectWillChange.sink { [weak self] _ in
       Task { @MainActor [weak self] in
-        guard let self else { return }
-        refreshStatusButton()
-        observeStatusButton()
+        await Task.yield()
+        self?.refreshStatusButton()
       }
     }
   }

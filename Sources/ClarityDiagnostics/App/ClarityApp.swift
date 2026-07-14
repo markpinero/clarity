@@ -5,7 +5,7 @@ import SwiftUI
 @main
 struct ClarityApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-  @State private var store = ClarityStore.shared
+  @StateObject private var store = ClarityStore.shared
 
   var body: some Scene {
     WindowGroup("Clarity", id: "control") {

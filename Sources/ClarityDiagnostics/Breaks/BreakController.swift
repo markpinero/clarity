@@ -1,14 +1,13 @@
 import AppKit
 import ClarityBreaks
-import Observation
+import Combine
 
 @MainActor
-@Observable
-final class BreakController {
-  private(set) var snapshot: BreakSnapshot
-  private(set) var configuration: BreakConfiguration
-  private(set) var now = Date()
-  private(set) var lastError: String?
+final class BreakController: ObservableObject {
+  @Published private(set) var snapshot: BreakSnapshot
+  @Published private(set) var configuration: BreakConfiguration
+  @Published private(set) var now = Date()
+  @Published private(set) var lastError: String?
 
   var isEnabled: Bool { configuration.isEnabled }
 

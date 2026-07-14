@@ -1,26 +1,25 @@
 import AppKit
 import ClarityBreaks
 import ClarityCore
+import Combine
 import Foundation
 import OSLog
-import Observation
 import UniformTypeIdentifiers
 
 @MainActor
-@Observable
-final class ClarityStore {
+final class ClarityStore: ObservableObject {
   static let shared = ClarityStore()
 
-  private(set) var preferences: AppPreferences
-  private(set) var displays: [DisplayDescriptor] = []
-  private(set) var driverMode: DisplayCoordinatorMode = .idle
-  private(set) var decision: DisplayPolicyDecision
-  private(set) var lastError: String?
-  private(set) var events: [ClarityEvent] = []
-  private(set) var now = Date()
-  private(set) var locationState: OneShotLocationProvider.State = .idle
-  private(set) var loginItemState: LoginItemService.State = .disabled
-  private(set) var activeApplication = ActiveApplicationMonitor.State.unavailable
+  @Published private(set) var preferences: AppPreferences
+  @Published private(set) var displays: [DisplayDescriptor] = []
+  @Published private(set) var driverMode: DisplayCoordinatorMode = .idle
+  @Published private(set) var decision: DisplayPolicyDecision
+  @Published private(set) var lastError: String?
+  @Published private(set) var events: [ClarityEvent] = []
+  @Published private(set) var now = Date()
+  @Published private(set) var locationState: OneShotLocationProvider.State = .idle
+  @Published private(set) var loginItemState: LoginItemService.State = .disabled
+  @Published private(set) var activeApplication = ActiveApplicationMonitor.State.unavailable
   let breakController: BreakController
 
   var isEnabled: Bool { preferences.isEnabled }

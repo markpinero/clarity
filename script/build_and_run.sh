@@ -6,7 +6,7 @@ APP_NAME="Clarity"
 PREVIOUS_APP_NAME="IrisAlternative"
 BUNDLE_ID="com.markpinero.Clarity"
 PREVIOUS_BUNDLE_ID="com.markpinero.IrisAlternative"
-MIN_SYSTEM_VERSION="14.0"
+MIN_SYSTEM_VERSION="13.0"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_CONFIGURATION="${CLARITY_BUILD_CONFIGURATION:-debug}"

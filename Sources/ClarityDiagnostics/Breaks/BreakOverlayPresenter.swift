@@ -1,6 +1,6 @@
 import AppKit
 import ClarityBreaks
-import Observation
+import Combine
 import SwiftUI
 
 struct BreakOverlayPresentationTransition: Equatable {
@@ -292,14 +292,13 @@ final class BreakOverlayPresenter {
 }
 
 @MainActor
-@Observable
-private final class BreakOverlayModel {
-  var kind = BreakKind.short
-  var remainingSeconds = 0
-  var totalSeconds = 1
-  var snoozeMinutes = 3
-  var exerciseIndex = 0
-  var currentTime = Date()
+private final class BreakOverlayModel: ObservableObject {
+  @Published var kind = BreakKind.short
+  @Published var remainingSeconds = 0
+  @Published var totalSeconds = 1
+  @Published var snoozeMinutes = 3
+  @Published var exerciseIndex = 0
+  @Published var currentTime = Date()
   var onSnooze: () -> Void = {}
   var onSkip: () -> Void = {}
 
@@ -315,7 +314,7 @@ private final class BreakOverlayModel {
 }
 
 private struct CountdownOverlayView: View {
-  @Bindable var model: BreakOverlayModel
+  @ObservedObject var model: BreakOverlayModel
 
   var body: some View {
     HStack(spacing: 18) {
@@ -373,7 +372,7 @@ private struct CountdownOverlayView: View {
 }
 
 private struct FullBreakOverlayView: View {
-  @Bindable var model: BreakOverlayModel
+  @ObservedObject var model: BreakOverlayModel
 
   var body: some View {
     ZStack {

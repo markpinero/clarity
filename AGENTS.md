@@ -2,11 +2,11 @@
 
 ## Project overview
 
-Clarity is a native macOS 14+ menu-bar app built with Swift 6 and Swift Package Manager. It controls display temperature and brightness, schedules profiles, and provides configurable screen-break reminders.
+Clarity is a native macOS 13+ menu-bar app built with Swift 6 and Swift Package Manager. It controls display temperature and brightness, schedules profiles, and provides configurable screen-break reminders.
 
 ## Environment
 
-- Use macOS 14 or later.
+- Build on a macOS version supported by Xcode 26. Produced app bundles support macOS 13 or later.
 - Use Xcode 26 or a compatible full Xcode installation.
 - Run all commands from the repository root.
 - Select the full Xcode toolchain before building, testing, or packaging:

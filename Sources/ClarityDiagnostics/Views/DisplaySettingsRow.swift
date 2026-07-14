@@ -2,7 +2,7 @@ import ClarityCore
 import SwiftUI
 
 struct DisplaySettingsRow: View {
-  @Bindable var store: ClarityStore
+  @ObservedObject var store: ClarityStore
   let display: DisplayDescriptor
 
   var body: some View {

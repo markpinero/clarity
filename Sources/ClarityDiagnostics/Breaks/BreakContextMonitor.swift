@@ -1,22 +1,21 @@
 import AppKit
 import ApplicationServices
 import ClarityBreaks
+import Combine
 import CoreAudio
 import CoreGraphics
 import CoreMediaIO
 import EventKit
 import GameController
 import IOKit.pwr_mgt
-import Observation
 
 @MainActor
-@Observable
-final class BreakContextMonitor {
-  private(set) var observation = BreakContextObservation()
-  private(set) var signalDetails: [BreakPauseReason: String] = [:]
-  private(set) var accessibilityPermission = ContextPermissionState.notDetermined
-  private(set) var screenRecordingPermission = ContextPermissionState.notDetermined
-  private(set) var calendarPermission = ContextPermissionState.notDetermined
+final class BreakContextMonitor: ObservableObject {
+  @Published private(set) var observation = BreakContextObservation()
+  @Published private(set) var signalDetails: [BreakPauseReason: String] = [:]
+  @Published private(set) var accessibilityPermission = ContextPermissionState.notDetermined
+  @Published private(set) var screenRecordingPermission = ContextPermissionState.notDetermined
+  @Published private(set) var calendarPermission = ContextPermissionState.notDetermined
   var onChange: ((BreakContextObservation) -> Void)?
 
   private let eventStore = EKEventStore()
@@ -84,13 +83,25 @@ final class BreakContextMonitor {
 
   private func requestCalendarPermission() {
     guard Self.calendarPermissionState() == .notDetermined else { return }
-    eventStore.requestFullAccessToEvents { [weak self] _, _ in
-      Task { @MainActor [weak self] in
-        self?.refreshPermissionState()
-        self?.lastCalendarScan = .distantPast
-        self?.poll()
+    if #available(macOS 14.0, *) {
+      eventStore.requestFullAccessToEvents { [weak self] _, _ in
+        Task { @MainActor [weak self] in
+          self?.refreshCalendarPermissionAfterRequest()
+        }
+      }
+    } else {
+      eventStore.requestAccess(to: .event) { [weak self] _, _ in
+        Task { @MainActor [weak self] in
+          self?.refreshCalendarPermissionAfterRequest()
+        }
       }
     }
+  }
+
+  private func refreshCalendarPermissionAfterRequest() {
+    refreshPermissionState()
+    lastCalendarScan = .distantPast
+    poll()
   }
 
   private func permissionState(for permission: ContextPermission) -> ContextPermissionState {

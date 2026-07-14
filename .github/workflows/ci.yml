@@ -29,6 +29,8 @@ jobs:
         run: |
           codesign --verify --deep --strict dist/release/Clarity.app
           plutil -extract CFBundleIdentifier raw dist/release/Clarity.app/Contents/Info.plist
+          test "$(plutil -extract LSMinimumSystemVersion raw dist/release/Clarity.app/Contents/Info.plist)" = "13.0"
+          vtool -show-build dist/release/Clarity.app/Contents/MacOS/Clarity | grep -Eq 'minos 13\.0'
           test -s dist/release/Clarity.zip
 
       - name: Upload release artifact

@@ -1,6 +1,6 @@
 import ClarityBreaks
+import Combine
 import Foundation
-import Observation
 import XCTest
 
 @testable import ClarityDiagnostics
@@ -21,13 +21,13 @@ final class BreakControllerObservationTests: XCTestCase {
     let controller = BreakController(store: store)
     let wasInvalidated = LockedFlag()
 
-    withObservationTracking {
-      _ = controller.snapshot
-    } onChange: {
+    let observation = controller.$snapshot.dropFirst().sink { _ in
       wasInvalidated.set()
     }
 
-    controller.tick(at: now)
+    withExtendedLifetime(observation) {
+      controller.tick(at: now)
+    }
 
     XCTAssertFalse(wasInvalidated.value)
   }

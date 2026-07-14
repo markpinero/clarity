@@ -4,8 +4,8 @@ Clarity is a native macOS menu-bar app for adaptive display temperature, brightn
 
 ## Requirements
 
-- macOS 14 or later
-- Xcode 26 or a compatible full Xcode toolchain
+- Runtime: macOS 13 Ventura or later
+- Development: Xcode 26 or a compatible full Xcode toolchain on a supported macOS host
 
 ## Run
 

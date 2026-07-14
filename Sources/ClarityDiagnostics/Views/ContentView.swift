@@ -3,9 +3,16 @@ import ClarityCore
 import SwiftUI
 
 struct OverviewView: View {
-  @Bindable var store: ClarityStore
+  @ObservedObject var store: ClarityStore
+  @ObservedObject private var breakController: BreakController
   let onOpenSchedule: () -> Void
   @State private var showsDiagnostics = false
+
+  init(store: ClarityStore, onOpenSchedule: @escaping () -> Void) {
+    self.store = store
+    _breakController = ObservedObject(wrappedValue: store.breakController)
+    self.onOpenSchedule = onOpenSchedule
+  }
 
   var body: some View {
     ScrollView {

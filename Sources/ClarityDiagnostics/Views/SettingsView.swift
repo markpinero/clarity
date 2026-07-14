@@ -14,11 +14,19 @@ struct SettingsView: View {
   }
 
   @Environment(\.scenePhase) private var scenePhase
-  @Bindable var store: ClarityStore
+  @ObservedObject var store: ClarityStore
+  @ObservedObject private var breakController: BreakController
+  @ObservedObject private var breakContextMonitor: BreakContextMonitor
   @State private var selectedTab = Tab.overview
   @State private var ruleBundleIdentifier = ""
   @State private var ruleDisplayName = ""
   @State private var ruleAction = ActiveAppAction.pause
+
+  init(store: ClarityStore) {
+    self.store = store
+    _breakController = ObservedObject(wrappedValue: store.breakController)
+    _breakContextMonitor = ObservedObject(wrappedValue: store.breakController.contextMonitor)
+  }
 
   var body: some View {
     TabView(selection: $selectedTab) {
@@ -69,7 +77,7 @@ struct SettingsView: View {
     }
     .frame(width: 720, height: 600)
     .scenePadding()
-    .onChange(of: scenePhase) { _, newPhase in
+    .onChange(of: scenePhase) { newPhase in
       guard newPhase == .active else { return }
       store.breakController.contextMonitor.refreshPermissionState()
     }
@@ -296,11 +304,15 @@ struct SettingsView: View {
       }
 
       if store.displays.isEmpty {
-        ContentUnavailableView(
-          "No Displays Found",
-          systemImage: "display.trianglebadge.exclamationmark",
-          description: Text("Refresh displays from the Clarity control window.")
-        )
+        VStack(spacing: 8) {
+          Label("No Displays Found", systemImage: "display.trianglebadge.exclamationmark")
+            .font(.headline)
+          Text("Refresh displays from the Clarity control window.")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
       }
     }
     .formStyle(.grouped)
