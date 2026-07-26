@@ -16,7 +16,7 @@ final class BreakController: ObservableObject {
     return switch snapshot.phase {
     case .stopped: "Breaks Off"
     case .focusing: "Focus"
-    case .countdown: "Break Soon"
+    case .countdown: isWaitingForTypingPause ? "Break When You Pause" : "Break Soon"
     case .breaking: snapshot.breakKind == .long ? "Long Break" : "Eye Break"
     case .paused: "Breaks Paused"
     }
@@ -36,6 +36,11 @@ final class BreakController: ObservableObject {
 
   var activePauseReasons: [BreakPauseReason] {
     snapshot.pauseReasons.sorted { $0.name < $1.name }
+  }
+
+  /// A due break is being held back because the user is still typing.
+  var isWaitingForTypingPause: Bool {
+    snapshot.typingDeferredSince != nil
   }
 
   private let store: any BreakStore
@@ -154,6 +159,8 @@ final class BreakController: ObservableObject {
       snoozeDuration: configuration.snoozeDuration,
       idleResetEnabled: configuration.idleResetEnabled,
       idleResetDuration: configuration.idleResetDuration,
+      typingDeferralEnabled: configuration.typingDeferralEnabled,
+      typingDeferralLimit: configuration.typingDeferralLimit,
       pauseDuringCalendarMeetings: configuration.pauseDuringCalendarMeetings,
       pauseDuringCalls: configuration.pauseDuringCalls,
       pauseDuringVideoPlayback: configuration.pauseDuringVideoPlayback,
@@ -173,7 +180,7 @@ final class BreakController: ObservableObject {
     var nextSnapshot = snapshot
     let effects = BreakReducer.reduce(
       &nextSnapshot,
-      event: .tick(now),
+      event: .tick(now, isTyping: contextMonitor.observation.isTyping),
       configuration: configuration
     )
     if nextSnapshot != snapshot {

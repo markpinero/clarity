@@ -4,7 +4,7 @@ public enum BreakEvent: Equatable, Sendable {
   case start(Date)
   case startBreak(Date)
   case stop
-  case tick(Date)
+  case tick(Date, isTyping: Bool = false)
   case pause(Date)
   case resume(Date)
   case contextChanged(
@@ -47,8 +47,8 @@ public enum BreakReducer {
       state = .stopped
       return [.persist, .dismissBreak]
 
-    case .tick(let now):
-      return tick(&state, now: now, configuration: configuration)
+    case .tick(let now, let isTyping):
+      return tick(&state, now: now, isTyping: isTyping, configuration: configuration)
 
     case .pause(let now):
       return reconcilePauseReasons(
@@ -66,8 +66,9 @@ public enum BreakReducer {
 
     case .contextChanged(let now, let reasons, let resetFocusAfterIdle):
       let manualPause = state.pauseReasons.contains(.manual)
-      let combinedReasons = reasons.union(manualPause ? [.manual] : [])
-      if resetFocusAfterIdle, state.phase != .stopped {
+      let automaticReasons = isBreakSession(state) ? [] : reasons
+      let combinedReasons = automaticReasons.union(manualPause ? [.manual] : [])
+      if resetFocusAfterIdle, isFocusSession(state) {
         startFocus(&state, at: now, duration: configuration.focusDuration)
         state.pauseReasons = []
         return [.persist, .dismissBreak]
@@ -101,6 +102,7 @@ public enum BreakReducer {
   private static func tick(
     _ state: inout BreakSnapshot,
     now: Date,
+    isTyping: Bool,
     configuration: BreakConfiguration
   ) -> [BreakEffect] {
     guard let deadline = state.phaseDeadline else { return [] }
@@ -108,6 +110,14 @@ public enum BreakReducer {
     switch state.phase {
     case .focusing:
       if now >= deadline {
+        if let deferred = deferBreakForTyping(
+          &state,
+          at: now,
+          isTyping: isTyping,
+          configuration: configuration
+        ) {
+          return deferred
+        }
         beginBreak(&state, at: now, configuration: configuration)
         return [.persist, .presentBreak]
       }
@@ -120,6 +130,14 @@ public enum BreakReducer {
 
     case .countdown:
       guard now >= deadline else { return [] }
+      if let deferred = deferBreakForTyping(
+        &state,
+        at: now,
+        isTyping: isTyping,
+        configuration: configuration
+      ) {
+        return deferred
+      }
       beginBreak(&state, at: now, configuration: configuration)
       return [.persist, .presentBreak]
 
@@ -131,6 +149,27 @@ public enum BreakReducer {
     case .stopped, .paused:
       return []
     }
+  }
+
+  /// Holds a due break back while the user is mid-keystroke, bounded by
+  /// `typingDeferralLimit` measured from the first deferral. Returns the effects for a
+  /// deferred break, or `nil` when the break must begin now.
+  private static func deferBreakForTyping(
+    _ state: inout BreakSnapshot,
+    at now: Date,
+    isTyping: Bool,
+    configuration: BreakConfiguration
+  ) -> [BreakEffect]? {
+    guard configuration.typingDeferralEnabled, isTyping else { return nil }
+    guard let deferredSince = state.typingDeferredSince else {
+      guard configuration.typingDeferralLimit > 0 else { return nil }
+      state.typingDeferredSince = now
+      return [.persist]
+    }
+    guard now.timeIntervalSince(deferredSince) < configuration.typingDeferralLimit else {
+      return nil
+    }
+    return []
   }
 
   private static func beginBreak(
@@ -148,6 +187,7 @@ public enum BreakReducer {
     )
     state.pausedPhase = nil
     state.pausedRemaining = nil
+    state.typingDeferredSince = nil
   }
 
   private static func startManualBreak(
@@ -161,6 +201,7 @@ public enum BreakReducer {
     state.pausedRemaining = nil
     state.breakKind = .short
     state.pauseReasons = []
+    state.typingDeferredSince = nil
   }
 
   private static func reconcilePauseReasons(
@@ -182,6 +223,7 @@ public enum BreakReducer {
       }
       state.phase = .paused
       state.phaseDeadline = nil
+      state.typingDeferredSince = nil
       return [.countdown, .breaking].contains(previousPhase)
         ? [.persist, .dismissBreak] : [.persist]
     }
@@ -206,6 +248,22 @@ public enum BreakReducer {
     return [.persist]
   }
 
+  private static func isBreakSession(_ state: BreakSnapshot) -> Bool {
+    state.phase == .breaking
+      || (state.phase == .paused && state.pausedPhase == .breaking)
+  }
+
+  private static func isFocusSession(_ state: BreakSnapshot) -> Bool {
+    switch state.phase {
+    case .focusing, .countdown:
+      true
+    case .paused:
+      [.focusing, .countdown].contains(state.pausedPhase)
+    case .stopped, .breaking:
+      false
+    }
+  }
+
   private static func startFocus(
     _ state: inout BreakSnapshot,
     at now: Date,
@@ -216,6 +274,7 @@ public enum BreakReducer {
     state.pausedPhase = nil
     state.pausedRemaining = nil
     state.breakKind = nil
+    state.typingDeferredSince = nil
   }
 
   private static func nextBreakKind(

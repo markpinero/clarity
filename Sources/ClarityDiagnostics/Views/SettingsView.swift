@@ -575,6 +575,36 @@ struct SettingsView: View {
           }
         }
 
+        Toggle(
+          "Wait for a pause in typing",
+          isOn: Binding(
+            get: { store.breakController.configuration.typingDeferralEnabled },
+            set: { enabled in
+              store.breakController.updateConfiguration { $0.typingDeferralEnabled = enabled }
+            }
+          )
+        )
+
+        if store.breakController.configuration.typingDeferralEnabled {
+          Picker(
+            "Wait at most",
+            selection: Binding(
+              get: { store.breakController.configuration.typingDeferralLimit },
+              set: { limit in
+                store.breakController.updateConfiguration { $0.typingDeferralLimit = limit }
+              }
+            )
+          ) {
+            ForEach([30, 60, 120, 180, 300], id: \.self) { seconds in
+              Text(Self.breakDurationLabel(seconds)).tag(TimeInterval(seconds))
+            }
+          }
+
+          Text("A due break holds off while you are typing, then starts at your next pause.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+
         LabeledContent(
           "Current idle time",
           value: Self.duration(Int(store.breakController.contextMonitor.observation.idleDuration))

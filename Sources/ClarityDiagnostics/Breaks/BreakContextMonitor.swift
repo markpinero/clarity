@@ -183,6 +183,10 @@ final class BreakContextMonitor: ObservableObject {
         .combinedSessionState,
         eventType: CGEventType(rawValue: UInt32.max)!
       ),
+      keyboardIdleDuration: CGEventSource.secondsSinceLastEventType(
+        .combinedSessionState,
+        eventType: .keyDown
+      ),
       hasCalendarMeeting: cachedCalendarMeeting,
       hasActiveCall: activeCall,
       hasVideoPlayback: !mediaAssertions.isEmpty || titleIndicatesVideo,

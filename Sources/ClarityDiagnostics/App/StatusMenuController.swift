@@ -3,6 +3,12 @@ import ClarityBreaks
 import ClarityCore
 import Combine
 
+struct BreakMenuVisibility {
+  static func showsStartBreak(isEnabled: Bool, phase: BreakPhase) -> Bool {
+    isEnabled && [.stopped, .focusing, .countdown, .paused].contains(phase)
+  }
+}
+
 @MainActor
 final class StatusMenuController: NSObject, NSMenuDelegate {
   private let store: ClarityStore
@@ -171,9 +177,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     let phase = controller.snapshot.phase
     breaksEnabledItem.state = controller.isEnabled ? .on : .off
     breakStatusItem.title = "Breaks · \(controller.phaseLabel)"
-    startBreakItem.isHidden =
-      !controller.isEnabled
-      || ![.stopped, .focusing, .countdown].contains(phase)
+    startBreakItem.isHidden = !BreakMenuVisibility.showsStartBreak(
+      isEnabled: controller.isEnabled,
+      phase: phase
+    )
     startFocusItem.isHidden = !controller.isEnabled || phase != .stopped
     resetFocusItem.isHidden =
       !controller.isEnabled

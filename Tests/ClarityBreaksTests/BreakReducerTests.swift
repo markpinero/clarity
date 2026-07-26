@@ -79,6 +79,55 @@ final class BreakReducerTests: XCTestCase {
     XCTAssertTrue(effects.contains(.presentBreak))
   }
 
+  func testManualStartOverridesAnAutomaticPause() throws {
+    let focusStart = Date(timeIntervalSince1970: 990)
+    let manualStart = focusStart.addingTimeInterval(8)
+    var state = BreakSnapshot.stopped
+    BreakReducer.reduce(&state, event: .start(focusStart), configuration: configuration)
+    BreakReducer.reduce(
+      &state,
+      event: .contextChanged(manualStart, reasons: [.screenSharing]),
+      configuration: configuration
+    )
+    XCTAssertEqual(state.phase, .paused)
+
+    let effects = BreakReducer.reduce(
+      &state,
+      event: .startBreak(manualStart),
+      configuration: configuration
+    )
+
+    XCTAssertEqual(state.phase, .breaking)
+    XCTAssertEqual(state.pauseReasons, [])
+    XCTAssertEqual(
+      state.phaseDeadline,
+      manualStart.addingTimeInterval(configuration.shortBreakDuration)
+    )
+    XCTAssertTrue(effects.contains(.presentBreak))
+  }
+
+  func testAutomaticPauseDoesNotDismissAnActiveManualBreak() throws {
+    let breakStart = Date(timeIntervalSince1970: 995)
+    var state = BreakSnapshot.stopped
+    BreakReducer.reduce(&state, event: .startBreak(breakStart), configuration: configuration)
+
+    let effects = BreakReducer.reduce(
+      &state,
+      event: .contextChanged(
+        breakStart.addingTimeInterval(2),
+        reasons: [.screenSharing]
+      ),
+      configuration: configuration
+    )
+
+    XCTAssertEqual(state.phase, .breaking)
+    XCTAssertEqual(
+      state.phaseDeadline,
+      breakStart.addingTimeInterval(configuration.shortBreakDuration)
+    )
+    XCTAssertFalse(effects.contains(.dismissBreak))
+  }
+
   func testEveryFourthCompletedFocusIntervalProducesALongBreak() {
     var state = BreakSnapshot.stopped
     let start = Date(timeIntervalSince1970: 1_000)
@@ -259,6 +308,29 @@ final class BreakReducerTests: XCTestCase {
     XCTAssertEqual(state.completedFocusIntervals, 0)
   }
 
+  func testReturningFromQualifiedIdleDoesNotCancelAManuallyStartedBreak() throws {
+    let breakStart = Date(timeIntervalSince1970: 4_800)
+    var state = BreakSnapshot.stopped
+    BreakReducer.reduce(&state, event: .startBreak(breakStart), configuration: configuration)
+
+    let effects = BreakReducer.reduce(
+      &state,
+      event: .contextChanged(
+        breakStart.addingTimeInterval(1),
+        reasons: [],
+        resetFocusAfterIdle: true
+      ),
+      configuration: configuration
+    )
+
+    XCTAssertEqual(state.phase, .breaking)
+    XCTAssertEqual(
+      state.phaseDeadline,
+      breakStart.addingTimeInterval(configuration.shortBreakDuration)
+    )
+    XCTAssertFalse(effects.contains(.dismissBreak))
+  }
+
   func testRecoveryAdvancesExpiredDeadlinesWithoutReplayingTimers() {
     let now = Date(timeIntervalSince1970: 5_000)
     var focus = BreakSnapshot(
@@ -347,5 +419,133 @@ final class BreakReducerTests: XCTestCase {
     XCTAssertTrue(decoded.pauseDuringVideoPlayback)
     XCTAssertTrue(decoded.pauseDuringGaming)
     XCTAssertTrue(decoded.pauseDuringScreenSharing)
+  }
+
+  private var typingConfiguration: BreakConfiguration {
+    BreakConfiguration(
+      focusDuration: 20,
+      shortBreakDuration: 5,
+      longBreakDuration: 12,
+      longBreakEvery: 4,
+      countdownDuration: 3,
+      snoozeDuration: 7,
+      typingDeferralLimit: 6
+    )
+  }
+
+  private func countdownState(
+    at start: Date,
+    configuration: BreakConfiguration
+  ) -> BreakSnapshot {
+    var state = BreakSnapshot.stopped
+    BreakReducer.reduce(&state, event: .start(start), configuration: configuration)
+    BreakReducer.reduce(
+      &state,
+      event: .tick(start.addingTimeInterval(17), isTyping: true),
+      configuration: configuration
+    )
+    XCTAssertEqual(state.phase, .countdown)
+    return state
+  }
+
+  func testDueBreakWaitsWhileTypingUntilTheDeferralLimit() throws {
+    let configuration = typingConfiguration
+    let start = Date(timeIntervalSince1970: 6_000)
+    var state = countdownState(at: start, configuration: configuration)
+
+    let due = start.addingTimeInterval(20)
+    let deferralEffects = BreakReducer.reduce(
+      &state,
+      event: .tick(due, isTyping: true),
+      configuration: configuration
+    )
+
+    XCTAssertEqual(state.phase, .countdown)
+    XCTAssertEqual(state.typingDeferredSince, due)
+    XCTAssertEqual(state.completedFocusIntervals, 0)
+    XCTAssertEqual(deferralEffects, [.persist])
+
+    let stillTyping = BreakReducer.reduce(
+      &state,
+      event: .tick(due.addingTimeInterval(5), isTyping: true),
+      configuration: configuration
+    )
+    XCTAssertEqual(state.phase, .countdown)
+    XCTAssertEqual(stillTyping, [])
+
+    let forcedEffects = BreakReducer.reduce(
+      &state,
+      event: .tick(due.addingTimeInterval(6), isTyping: true),
+      configuration: configuration
+    )
+    XCTAssertEqual(state.phase, .breaking)
+    XCTAssertNil(state.typingDeferredSince)
+    XCTAssertEqual(state.completedFocusIntervals, 1)
+    XCTAssertTrue(forcedEffects.contains(.presentBreak))
+  }
+
+  func testDeferredBreakBeginsAtTheFirstPauseInTyping() throws {
+    let configuration = typingConfiguration
+    let start = Date(timeIntervalSince1970: 6_500)
+    var state = countdownState(at: start, configuration: configuration)
+
+    let due = start.addingTimeInterval(20)
+    BreakReducer.reduce(&state, event: .tick(due, isTyping: true), configuration: configuration)
+    XCTAssertEqual(state.phase, .countdown)
+
+    let paused = due.addingTimeInterval(2)
+    let effects = BreakReducer.reduce(
+      &state,
+      event: .tick(paused, isTyping: false),
+      configuration: configuration
+    )
+
+    XCTAssertEqual(state.phase, .breaking)
+    XCTAssertNil(state.typingDeferredSince)
+    XCTAssertEqual(state.phaseDeadline, paused.addingTimeInterval(configuration.shortBreakDuration))
+    XCTAssertTrue(effects.contains(.presentBreak))
+  }
+
+  func testTypingDoesNotDeferTheBreakWhenDeferralIsDisabled() throws {
+    var configuration = typingConfiguration
+    configuration.typingDeferralEnabled = false
+    let start = Date(timeIntervalSince1970: 7_000)
+    var state = countdownState(at: start, configuration: configuration)
+
+    let due = start.addingTimeInterval(20)
+    BreakReducer.reduce(&state, event: .tick(due, isTyping: true), configuration: configuration)
+
+    XCTAssertEqual(state.phase, .breaking)
+    XCTAssertNil(state.typingDeferredSince)
+  }
+
+  func testAutomaticPauseRestartsTheTypingDeferralBudget() throws {
+    let configuration = typingConfiguration
+    let start = Date(timeIntervalSince1970: 7_500)
+    var state = countdownState(at: start, configuration: configuration)
+
+    let due = start.addingTimeInterval(20)
+    BreakReducer.reduce(&state, event: .tick(due, isTyping: true), configuration: configuration)
+    XCTAssertNotNil(state.typingDeferredSince)
+
+    BreakReducer.reduce(
+      &state,
+      event: .contextChanged(due.addingTimeInterval(1), reasons: [.call]),
+      configuration: configuration
+    )
+    XCTAssertEqual(state.phase, .paused)
+    XCTAssertNil(state.typingDeferredSince)
+
+    let resumed = due.addingTimeInterval(300)
+    BreakReducer.reduce(
+      &state,
+      event: .contextChanged(resumed, reasons: []),
+      configuration: configuration
+    )
+    XCTAssertEqual(state.phase, .countdown)
+
+    BreakReducer.reduce(&state, event: .tick(resumed, isTyping: true), configuration: configuration)
+    XCTAssertEqual(state.phase, .countdown)
+    XCTAssertEqual(state.typingDeferredSince, resumed)
   }
 }

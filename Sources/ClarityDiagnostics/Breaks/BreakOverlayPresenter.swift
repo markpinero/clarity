@@ -28,6 +28,12 @@ struct BreakOverlayPresentationState {
   }
 }
 
+struct BreakOverlayPanelGeometry {
+  static func contentRect(for windowFrame: CGRect, on screenFrame: CGRect) -> CGRect {
+    windowFrame.offsetBy(dx: -screenFrame.minX, dy: -screenFrame.minY)
+  }
+}
+
 @MainActor
 final class BreakOverlayPresenter {
   private let model = BreakOverlayModel()
@@ -57,28 +63,24 @@ final class BreakOverlayPresenter {
     )
 
     guard let screen = screenContainingPointer() else { return }
-    let size = CGSize(width: 430, height: 156)
+    let width = BreakCountdownAlertView.width
     let visibleFrame = screen.visibleFrame
-    let frame = CGRect(
-      x: visibleFrame.midX - size.width / 2,
-      y: visibleFrame.maxY - size.height - 42,
-      width: size.width,
-      height: size.height
-    )
     let panel = makePanel(
-      frame: frame,
+      frame: CGRect(
+        x: visibleFrame.midX - width / 2, y: visibleFrame.maxY - 42, width: width, height: 1),
       screen: screen,
       level: .statusBar,
-      material: .hudWindow,
-      cornerRadius: 24,
+      material: .windowBackground,
+      cornerRadius: 12,
       hasShadow: true,
       isOpaque: false,
       activates: false,
-      content: CountdownOverlayView(model: model)
+      content: BreakCountdownAlertView(model: model)
     )
     panel.setAccessibilityLabel("Clarity break countdown")
-    panel.orderFrontRegardless()
     panels = [panel]
+    resizeCountdownPanelToFit()
+    panel.orderFrontRegardless()
   }
 
   func presentBreak(
@@ -124,14 +126,32 @@ final class BreakOverlayPresenter {
 
   func update(snapshot: BreakSnapshot, now: Date) {
     model.kind = snapshot.breakKind ?? .short
+    model.phaseDeadline = snapshot.phaseDeadline
     let remainingSeconds = Int(ceil(snapshot.remaining(at: now) ?? 0))
     if remainingSeconds != model.remainingSeconds {
-      withAnimation(.linear(duration: 0.85)) {
-        model.remainingSeconds = remainingSeconds
-      }
+      model.remainingSeconds = remainingSeconds
     }
     model.currentTime = now
     model.exerciseIndex = snapshot.completedFocusIntervals % model.exercises.count
+    model.isWaitingForTypingPause = snapshot.typingDeferredSince != nil
+    if presentationState.mode == .countdown {
+      resizeCountdownPanelToFit()
+    }
+  }
+
+  /// Keeps the alert exactly as tall as its content, anchored by its top edge, so the
+  /// button row can never be clipped when the copy changes length.
+  private func resizeCountdownPanelToFit() {
+    guard let panel = panels.first, let contentView = panel.contentView else { return }
+    let height = contentView.fittingSize.height
+    guard height > 0, abs(height - panel.frame.height) > 0.5 else { return }
+    let frame = CGRect(
+      x: panel.frame.minX,
+      y: panel.frame.maxY - height,
+      width: panel.frame.width,
+      height: height
+    )
+    panel.setFrame(frame, display: true)
   }
 
   func dismiss() {
@@ -244,7 +264,7 @@ final class BreakOverlayPresenter {
     let styleMask: NSWindow.StyleMask =
       activates ? [.borderless] : [.borderless, .nonactivatingPanel]
     let panel = NSPanel(
-      contentRect: frame,
+      contentRect: BreakOverlayPanelGeometry.contentRect(for: frame, on: screen.frame),
       styleMask: styleMask,
       backing: .buffered,
       defer: false,
@@ -292,13 +312,15 @@ final class BreakOverlayPresenter {
 }
 
 @MainActor
-private final class BreakOverlayModel: ObservableObject {
+final class BreakOverlayModel: ObservableObject {
   @Published var kind = BreakKind.short
+  @Published var phaseDeadline: Date?
   @Published var remainingSeconds = 0
   @Published var totalSeconds = 1
   @Published var snoozeMinutes = 3
   @Published var exerciseIndex = 0
   @Published var currentTime = Date()
+  @Published var isWaitingForTypingPause = false
   var onSnooze: () -> Void = {}
   var onSkip: () -> Void = {}
 
@@ -308,66 +330,20 @@ private final class BreakOverlayModel: ObservableObject {
     "Drop your shoulders and relax your neck.",
   ]
 
-  var progress: Double {
-    min(1, max(0, Double(remainingSeconds) / Double(max(1, totalSeconds))))
+  func progress(at date: Date) -> Double {
+    BreakOverlayProgress.fraction(
+      deadline: phaseDeadline,
+      at: date,
+      totalSeconds: totalSeconds
+    )
   }
 }
 
-private struct CountdownOverlayView: View {
-  @ObservedObject var model: BreakOverlayModel
-
-  var body: some View {
-    HStack(spacing: 18) {
-      ZStack {
-        Circle()
-          .stroke(.white.opacity(0.16), lineWidth: 5)
-        Circle()
-          .trim(from: 0, to: model.progress)
-          .stroke(
-            LinearGradient(
-              colors: [.cyan, .blue],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            ),
-            style: StrokeStyle(lineWidth: 5, lineCap: .round)
-          )
-          .rotationEffect(.degrees(-90))
-          .animation(.linear(duration: 0.85), value: model.progress)
-        Text(Self.duration(model.remainingSeconds))
-          .font(.system(.body, design: .rounded, weight: .semibold).monospacedDigit())
-          .contentTransition(.numericText(countsDown: true))
-          .animation(.easeOut(duration: 0.2), value: model.remainingSeconds)
-      }
-      .frame(width: 72, height: 72)
-      .accessibilityLabel("Break begins in \(Self.duration(model.remainingSeconds))")
-
-      VStack(alignment: .leading, spacing: 5) {
-        Text(model.kind == .long ? "Long break begins soon" : "Eye break begins soon")
-          .font(.headline)
-        Text("Finish your thought, then give your eyes a moment away from the screen.")
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-
-        HStack(spacing: 8) {
-          Button("Snooze") { model.onSnooze() }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-          Button("Skip") { model.onSkip() }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        }
-        .padding(.top, 4)
-      }
-    }
-    .foregroundStyle(.white)
-    .padding(22)
-    .frame(width: 430, height: 156)
-    .background(Color(red: 0.10, green: 0.12, blue: 0.16))
-  }
-
-  private static func duration(_ seconds: Int) -> String {
-    String(format: "%d:%02d", max(0, seconds) / 60, max(0, seconds) % 60)
+struct BreakOverlayProgress {
+  static func fraction(deadline: Date?, at date: Date, totalSeconds: Int) -> Double {
+    guard let deadline else { return 0 }
+    let remaining = deadline.timeIntervalSince(date)
+    return min(1, max(0, remaining / Double(max(1, totalSeconds))))
   }
 }
 
@@ -427,18 +403,19 @@ private struct FullBreakOverlayView: View {
           ZStack {
             Circle()
               .stroke(.white.opacity(0.12), lineWidth: 8)
-            Circle()
-              .trim(from: 0, to: model.progress)
-              .stroke(
-                LinearGradient(
-                  colors: [.white, .cyan.opacity(0.75)],
-                  startPoint: .top,
-                  endPoint: .bottomTrailing
-                ),
-                style: StrokeStyle(lineWidth: 8, lineCap: .round)
-              )
-              .rotationEffect(.degrees(-90))
-              .animation(.linear(duration: 0.85), value: model.progress)
+            TimelineView(.animation(paused: model.remainingSeconds <= 0)) { timeline in
+              Circle()
+                .trim(from: 0, to: model.progress(at: timeline.date))
+                .stroke(
+                  LinearGradient(
+                    colors: [.white, .cyan.opacity(0.75)],
+                    startPoint: .top,
+                    endPoint: .bottomTrailing
+                  ),
+                  style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+            }
             Text(Self.duration(model.remainingSeconds))
               .font(.system(size: 44, weight: .medium, design: .rounded).monospacedDigit())
               .contentTransition(.numericText(countsDown: true))

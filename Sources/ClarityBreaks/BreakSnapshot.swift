@@ -44,6 +44,8 @@ public struct BreakSnapshot: Codable, Equatable, Sendable {
   public var completedFocusIntervals: Int
   public var snoozeCount: Int
   public var pauseReasons: Set<BreakPauseReason>
+  /// When a due break was first held back because the user was typing.
+  public var typingDeferredSince: Date?
 
   public init(
     phase: BreakPhase,
@@ -53,7 +55,8 @@ public struct BreakSnapshot: Codable, Equatable, Sendable {
     breakKind: BreakKind? = nil,
     completedFocusIntervals: Int = 0,
     snoozeCount: Int = 0,
-    pauseReasons: Set<BreakPauseReason> = []
+    pauseReasons: Set<BreakPauseReason> = [],
+    typingDeferredSince: Date? = nil
   ) {
     self.phase = phase
     self.phaseDeadline = phaseDeadline
@@ -63,6 +66,7 @@ public struct BreakSnapshot: Codable, Equatable, Sendable {
     self.completedFocusIntervals = max(0, completedFocusIntervals)
     self.snoozeCount = max(0, snoozeCount)
     self.pauseReasons = pauseReasons
+    self.typingDeferredSince = typingDeferredSince
   }
 
   public static let stopped = BreakSnapshot(phase: .stopped)
@@ -81,6 +85,7 @@ public struct BreakSnapshot: Codable, Equatable, Sendable {
     case completedFocusIntervals
     case snoozeCount
     case pauseReasons
+    case typingDeferredSince
   }
 
   public init(from decoder: any Decoder) throws {
@@ -99,7 +104,8 @@ public struct BreakSnapshot: Codable, Equatable, Sendable {
       pauseReasons: try container.decodeIfPresent(
         Set<BreakPauseReason>.self,
         forKey: .pauseReasons
-      ) ?? []
+      ) ?? [],
+      typingDeferredSince: try container.decodeIfPresent(Date.self, forKey: .typingDeferredSince)
     )
   }
 }

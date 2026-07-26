@@ -2,6 +2,8 @@ import Foundation
 
 public struct BreakConfiguration: Codable, Equatable, Sendable {
   public static let preBreakNotificationDuration: TimeInterval = 10
+  /// A keystroke within this window counts as actively typing.
+  public static let typingActivityWindow: TimeInterval = 3
 
   public var isEnabled: Bool
   public var focusDuration: TimeInterval
@@ -12,6 +14,8 @@ public struct BreakConfiguration: Codable, Equatable, Sendable {
   public var snoozeDuration: TimeInterval
   public var idleResetEnabled: Bool
   public var idleResetDuration: TimeInterval
+  public var typingDeferralEnabled: Bool
+  public var typingDeferralLimit: TimeInterval
   public var pauseDuringCalendarMeetings: Bool
   public var pauseDuringCalls: Bool
   public var pauseDuringVideoPlayback: Bool
@@ -28,6 +32,8 @@ public struct BreakConfiguration: Codable, Equatable, Sendable {
     snoozeDuration: TimeInterval,
     idleResetEnabled: Bool = true,
     idleResetDuration: TimeInterval = 5 * 60,
+    typingDeferralEnabled: Bool = true,
+    typingDeferralLimit: TimeInterval = 2 * 60,
     pauseDuringCalendarMeetings: Bool = true,
     pauseDuringCalls: Bool = true,
     pauseDuringVideoPlayback: Bool = true,
@@ -43,6 +49,8 @@ public struct BreakConfiguration: Codable, Equatable, Sendable {
     self.snoozeDuration = max(1, snoozeDuration)
     self.idleResetEnabled = idleResetEnabled
     self.idleResetDuration = max(30, idleResetDuration)
+    self.typingDeferralEnabled = typingDeferralEnabled
+    self.typingDeferralLimit = max(0, typingDeferralLimit)
     self.pauseDuringCalendarMeetings = pauseDuringCalendarMeetings
     self.pauseDuringCalls = pauseDuringCalls
     self.pauseDuringVideoPlayback = pauseDuringVideoPlayback
@@ -69,6 +77,8 @@ public struct BreakConfiguration: Codable, Equatable, Sendable {
     case snoozeDuration
     case idleResetEnabled
     case idleResetDuration
+    case typingDeferralEnabled
+    case typingDeferralLimit
     case pauseDuringCalendarMeetings
     case pauseDuringCalls
     case pauseDuringVideoPlayback
@@ -91,6 +101,14 @@ public struct BreakConfiguration: Codable, Equatable, Sendable {
         TimeInterval.self,
         forKey: .idleResetDuration
       ) ?? 5 * 60,
+      typingDeferralEnabled: try container.decodeIfPresent(
+        Bool.self,
+        forKey: .typingDeferralEnabled
+      ) ?? true,
+      typingDeferralLimit: try container.decodeIfPresent(
+        TimeInterval.self,
+        forKey: .typingDeferralLimit
+      ) ?? 2 * 60,
       pauseDuringCalendarMeetings: try container.decodeIfPresent(
         Bool.self,
         forKey: .pauseDuringCalendarMeetings
