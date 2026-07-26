@@ -53,6 +53,30 @@ final class DisplayTransformTests: XCTestCase {
     XCTAssertGreaterThan(result.green.last!, result.blue.last!)
   }
 
+  func testFactorsMatchAdjustmentTransformExactly() throws {
+    let baseline = try RGBTransferTable(red: [0, 0.5, 1], green: [0, 0.5, 1], blue: [0, 0.5, 1])
+    for kelvin in stride(from: 1_000, through: 6_500, by: 550) {
+      for brightness: Float in [0.25, 0.8, 1.0] {
+        let adjustment = DisplayAdjustment(kelvin: kelvin, brightness: brightness)
+        let factors = DisplayTransform.factors(for: adjustment)
+        XCTAssertEqual(
+          DisplayTransform.apply(factors: factors, to: baseline),
+          DisplayTransform.apply(adjustment: adjustment, to: baseline),
+          "mismatch at \(kelvin) K / \(brightness)"
+        )
+      }
+    }
+  }
+
+  func testIdentityFactorsReproduceTheBaseline() throws {
+    let baseline = try RGBTransferTable(
+      red: [0.1, 0.5, 0.9],
+      green: [0.2, 0.6, 1],
+      blue: [0.3, 0.7, 1]
+    )
+    XCTAssertEqual(DisplayTransform.apply(factors: .identity, to: baseline), baseline)
+  }
+
   func testCurrentLegacyIrisGammaEndpointsMatchMeasuredColorRamp() throws {
     let baseline = try RGBTransferTable(
       red: [0, 1],

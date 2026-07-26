@@ -5,13 +5,23 @@ public enum DisplayTransform {
     adjustment: DisplayAdjustment,
     to baseline: RGBTransferTable
   ) -> RGBTransferTable {
-    let brightness = min(max(adjustment.brightness, 0), 1)
-    let factors = temperatureFactors(for: adjustment.kelvin)
+    apply(factors: factors(for: adjustment), to: baseline)
+  }
 
-    return RGBTransferTable(
-      validatedRed: baseline.red.map { clamp($0 * brightness * factors.red) },
-      green: baseline.green.map { clamp($0 * brightness * factors.green) },
-      blue: baseline.blue.map { clamp($0 * brightness * factors.blue) }
+  public static func factors(for adjustment: DisplayAdjustment) -> ChannelFactors {
+    let temperature = temperatureFactors(for: adjustment.kelvin)
+    return ChannelFactors(red: temperature.red, green: temperature.green, blue: temperature.blue)
+      .scaled(by: adjustment.brightness)
+  }
+
+  public static func apply(
+    factors: ChannelFactors,
+    to baseline: RGBTransferTable
+  ) -> RGBTransferTable {
+    RGBTransferTable(
+      validatedRed: baseline.red.map { clamp($0 * factors.red) },
+      green: baseline.green.map { clamp($0 * factors.green) },
+      blue: baseline.blue.map { clamp($0 * factors.blue) }
     )
   }
 
