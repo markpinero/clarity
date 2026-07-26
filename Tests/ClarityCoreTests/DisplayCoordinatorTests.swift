@@ -184,6 +184,27 @@ final class DisplayCoordinatorTests: XCTestCase {
     XCTAssertEqual(driver.applyCalls[1].1.red.last, 0.8)
     XCTAssertEqual(coordinator.mode, .applied(targets))
   }
+
+  func testManualTimingDefersWritesUntilAdvanced() throws {
+    let display = DisplayDescriptor.testDisplay(stableID: "display-a", runtimeID: 10)
+    let baseline = try RGBTransferTable.identity(samples: 3)
+    let driver = FakeDisplayDriver(displays: [display], baselines: [display.id.stableID: baseline])
+    let coordinator = DisplayCoordinator(driver: driver)
+    let adjustment = DisplayAdjustment(kelvin: 3_000, brightness: 0.8)
+    let start = Date(timeIntervalSince1970: 1_000)
+
+    try coordinator.refreshDisplays()
+    driver.applyCalls.removeAll()
+    try coordinator.apply(
+      adjustment: adjustment,
+      to: [display.id.stableID],
+      timing: .manual,
+      at: start
+    )
+
+    XCTAssertTrue(driver.applyCalls.isEmpty)
+    XCTAssertEqual(coordinator.mode, .applied([display.id.stableID: adjustment]))
+  }
 }
 
 private final class FakeDisplayDriver: DisplayDriver {
