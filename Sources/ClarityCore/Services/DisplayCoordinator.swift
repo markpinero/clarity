@@ -202,8 +202,7 @@ public final class DisplayCoordinator {
     timing: RampTiming = .instant,
     at now: Date = Date()
   ) throws {
-    for display in displays where stableIDs.contains(display.id.stableID) && display.supportsGamma
-    {
+    for display in displays where stableIDs.contains(display.id.stableID) && display.supportsGamma {
       guard let baseline = baselines[display.id.stableID] else {
         continue
       }

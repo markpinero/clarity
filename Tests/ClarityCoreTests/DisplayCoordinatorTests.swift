@@ -215,7 +215,8 @@ final class DisplayCoordinatorTests: XCTestCase {
     let start = Date(timeIntervalSince1970: 2_000)
 
     try coordinator.refreshDisplays()
-    try coordinator.apply(adjustment: adjustment, to: [display.id.stableID], timing: .manual, at: start)
+    try coordinator.apply(
+      adjustment: adjustment, to: [display.id.stableID], timing: .manual, at: start)
 
     let half = try coordinator.advanceRamp(at: start.addingTimeInterval(0.4))
     XCTAssertTrue(half.isLive)
@@ -320,7 +321,8 @@ final class DisplayCoordinatorTests: XCTestCase {
     let start = Date(timeIntervalSince1970: 6_000)
 
     try coordinator.refreshDisplays()
-    try coordinator.apply(adjustment: adjustment, to: [display.id.stableID], timing: .manual, at: start)
+    try coordinator.apply(
+      adjustment: adjustment, to: [display.id.stableID], timing: .manual, at: start)
     let manualStatus = try coordinator.advanceRamp(at: start.addingTimeInterval(0.1))
     XCTAssertEqual(manualStatus.nextInterval, 1.0 / 30, accuracy: 1e-9)
 

@@ -87,6 +87,7 @@ final class ClarityStore: ObservableObject {
   private let globalHotKeyMonitor: GlobalHotKeyMonitor
   private var wakeObservers: [NSObjectProtocol] = []
   private var scheduleTimer: Timer?
+  private var rampTimer: Timer?
   private var started = false
   private let logger = Logger(
     subsystem: "com.markpinero.Clarity",
@@ -127,7 +128,7 @@ final class ClarityStore: ObservableObject {
       persistAndEvaluate(reason: "Updated coarse solar location", force: true)
     }
 
-    refreshDisplays(reason: "Initial display probe", forceApply: true)
+    refreshDisplays(reason: "Initial display probe", forceApply: true, timing: .instant)
     startContextAutomation()
     startGlobalHotKey()
     breakController.startRuntime()
@@ -173,7 +174,8 @@ final class ClarityStore: ObservableObject {
     refreshDecision()
 
     perform("Reset") {
-      try coordinator.reset()
+      try coordinator.reset(timing: .manual)
+      pumpRamp()
       driverMode = coordinator.mode
       record("Restored captured display tables and turned Clarity off.")
     }
@@ -397,7 +399,7 @@ final class ClarityStore: ObservableObject {
     }
   }
 
-  func refreshDisplays(reason: String, forceApply: Bool = false) {
+  func refreshDisplays(reason: String, forceApply: Bool = false, timing: RampTiming = .manual) {
     do {
       try coordinator.refreshDisplays()
       displays = coordinator.displays
@@ -412,12 +414,14 @@ final class ClarityStore: ObservableObject {
       return
     }
 
-    evaluatePolicy(reason: reason, force: forceApply, shouldLog: false)
+    evaluatePolicy(reason: reason, force: forceApply, shouldLog: false, timing: timing)
   }
 
   func restoreForTermination() {
     scheduleTimer?.invalidate()
     scheduleTimer = nil
+    rampTimer?.invalidate()
+    rampTimer = nil
     topologyMonitor.stop()
     activeApplicationMonitor.stop()
     globalHotKeyMonitor.stop()
@@ -428,7 +432,7 @@ final class ClarityStore: ObservableObject {
     wakeObservers.removeAll()
 
     do {
-      try coordinator.reset()
+      try coordinator.reset(timing: .instant)
       logger.info("Restored display tables during application termination.")
     } catch {
       logger.error(
@@ -506,14 +510,20 @@ final class ClarityStore: ObservableObject {
     }
   }
 
-  private func evaluatePolicy(reason: String, force: Bool, shouldLog: Bool) {
+  private func evaluatePolicy(
+    reason: String,
+    force: Bool,
+    shouldLog: Bool,
+    timing: RampTiming = .manual
+  ) {
     now = .now
     refreshDecision()
 
     perform(reason) {
       guard let adjustment = decision.adjustment else {
         if coordinator.mode != .idle {
-          try coordinator.reset()
+          try coordinator.reset(timing: timing)
+          pumpRamp()
         }
         driverMode = coordinator.mode
         if shouldLog {
@@ -538,7 +548,8 @@ final class ClarityStore: ObservableObject {
         return
       }
 
-      try coordinator.apply(adjustments: targets)
+      try coordinator.apply(adjustments: targets, timing: timing)
+      pumpRamp()
       driverMode = coordinator.mode
       if shouldLog {
         record(
@@ -546,6 +557,34 @@ final class ClarityStore: ObservableObject {
         )
       }
     }
+  }
+
+  private func pumpRamp() {
+    do {
+      let status = try coordinator.advanceRamp()
+      driverMode = coordinator.mode
+      if status.isLive {
+        scheduleRampTimer(interval: status.nextInterval)
+      } else {
+        rampTimer?.invalidate()
+        rampTimer = nil
+      }
+    } catch {
+      rampTimer?.invalidate()
+      rampTimer = nil
+      driverMode = coordinator.mode
+      lastError = error.localizedDescription
+      record("Display ramp failed: \(error.localizedDescription)", level: .error)
+    }
+  }
+
+  private func scheduleRampTimer(interval: TimeInterval) {
+    guard rampTimer == nil else { return }
+    let timer = Timer(timeInterval: max(interval, 1.0 / 60), repeats: true) { [weak self] _ in
+      Task { @MainActor [weak self] in self?.pumpRamp() }
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    rampTimer = timer
   }
 
   private func refreshDecision() {
@@ -583,7 +622,8 @@ final class ClarityStore: ObservableObject {
   private func startScheduleTimer() {
     let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
       Task { @MainActor [weak self] in
-        self?.evaluatePolicy(reason: "Schedule tick", force: false, shouldLog: false)
+        self?.evaluatePolicy(
+          reason: "Schedule tick", force: false, shouldLog: false, timing: .schedule)
       }
     }
     RunLoop.main.add(timer, forMode: .common)
@@ -612,7 +652,8 @@ final class ClarityStore: ObservableObject {
     wakeObservers = names.map { name in
       center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
         Task { @MainActor [weak self] in
-          self?.refreshDisplays(reason: "System or displays woke", forceApply: true)
+          self?.refreshDisplays(
+            reason: "System or displays woke", forceApply: true, timing: .instant)
         }
       }
     }
