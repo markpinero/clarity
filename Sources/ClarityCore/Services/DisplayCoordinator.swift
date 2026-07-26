@@ -6,6 +6,16 @@ public enum DisplayCoordinatorMode: Equatable, Sendable {
   case paused([String: DisplayAdjustment])
 }
 
+public struct RampStatus: Equatable, Sendable {
+  public let isLive: Bool
+  public let nextInterval: TimeInterval
+
+  public init(isLive: Bool, nextInterval: TimeInterval) {
+    self.isLive = isLive
+    self.nextInterval = nextInterval
+  }
+}
+
 public final class DisplayCoordinator {
   public private(set) var displays: [DisplayDescriptor] = []
   public private(set) var mode: DisplayCoordinatorMode = .idle
@@ -135,6 +145,56 @@ public final class DisplayCoordinator {
     if case .applied(let adjustments) = previousMode {
       try apply(adjustments: adjustments)
     }
+  }
+
+  @discardableResult
+  public func advanceRamp(at now: Date = Date()) throws -> RampStatus {
+    guard !ramps.isEmpty else {
+      return RampStatus(isLive: false, nextInterval: 0)
+    }
+
+    var shortestDuration = TimeInterval.greatestFiniteMagnitude
+    do {
+      for display in displays where display.supportsGamma {
+        let stableID = display.id.stableID
+        guard let ramp = ramps[stableID], let baseline = baselines[stableID] else {
+          continue
+        }
+        shortestDuration = min(shortestDuration, ramp.timing.duration)
+        let elapsed = now.timeIntervalSince(ramp.startedAt)
+        // Date arithmetic lands epsilon-below the exact boundary; settle within a
+        // tolerance so the final frame writes the exact target table.
+        let tolerance = 1e-6 * max(1, ramp.timing.duration)
+        let settled = elapsed >= ramp.timing.duration - tolerance
+        let factors =
+          settled
+          ? ramp.targetFactors
+          : ramp.startFactors.interpolated(
+            to: ramp.targetFactors,
+            progress: ramp.timing.eased(progress: elapsed / ramp.timing.duration)
+          )
+        try driver.apply(DisplayTransform.apply(factors: factors, to: baseline), to: display.id)
+        displayedFactors[stableID] = factors
+        if settled {
+          ramps[stableID] = nil
+        }
+      }
+    } catch {
+      for display in displays where ramps[display.id.stableID] != nil {
+        if let baseline = baselines[display.id.stableID] {
+          try? driver.apply(baseline, to: display.id)
+          displayedFactors[display.id.stableID] = .identity
+        }
+      }
+      ramps.removeAll()
+      activeAdjustments.removeAll()
+      mode = .idle
+      throw error
+    }
+
+    let isLive = !ramps.isEmpty
+    let interval: TimeInterval = isLive ? (shortestDuration <= 1 ? 1.0 / 30 : 0.25) : 0
+    return RampStatus(isLive: isLive, nextInterval: interval)
   }
 
   private func restore(

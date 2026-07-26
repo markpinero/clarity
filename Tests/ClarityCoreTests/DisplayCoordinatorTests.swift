@@ -205,6 +205,135 @@ final class DisplayCoordinatorTests: XCTestCase {
     XCTAssertTrue(driver.applyCalls.isEmpty)
     XCTAssertEqual(coordinator.mode, .applied([display.id.stableID: adjustment]))
   }
+
+  func testAdvanceRampWritesInterpolatedFramesAndSettlesExactly() throws {
+    let display = DisplayDescriptor.testDisplay(stableID: "display-a", runtimeID: 10)
+    let baseline = try RGBTransferTable.identity(samples: 3)
+    let driver = FakeDisplayDriver(displays: [display], baselines: [display.id.stableID: baseline])
+    let coordinator = DisplayCoordinator(driver: driver)
+    let adjustment = DisplayAdjustment(kelvin: 3_000, brightness: 0.8)
+    let start = Date(timeIntervalSince1970: 2_000)
+
+    try coordinator.refreshDisplays()
+    try coordinator.apply(adjustment: adjustment, to: [display.id.stableID], timing: .manual, at: start)
+
+    let half = try coordinator.advanceRamp(at: start.addingTimeInterval(0.4))
+    XCTAssertTrue(half.isLive)
+    let midTable = driver.applyCalls.last!.1
+    XCTAssertNotEqual(midTable, baseline)
+    XCTAssertNotEqual(midTable, DisplayTransform.apply(adjustment: adjustment, to: baseline))
+
+    let done = try coordinator.advanceRamp(at: start.addingTimeInterval(0.8))
+    XCTAssertFalse(done.isLive)
+    XCTAssertEqual(
+      driver.applyCalls.last!.1,
+      DisplayTransform.apply(adjustment: adjustment, to: baseline)
+    )
+  }
+
+  func testRetargetMidRampContinuesFromCurrentFactors() throws {
+    let display = DisplayDescriptor.testDisplay(stableID: "display-a", runtimeID: 10)
+    let baseline = try RGBTransferTable.identity(samples: 3)
+    let driver = FakeDisplayDriver(displays: [display], baselines: [display.id.stableID: baseline])
+    let coordinator = DisplayCoordinator(driver: driver)
+    let adjustmentA = DisplayAdjustment(kelvin: 4_500, brightness: 1)
+    let adjustmentB = DisplayAdjustment(kelvin: 2_500, brightness: 0.9)
+    let start = Date(timeIntervalSince1970: 3_000)
+
+    try coordinator.refreshDisplays()
+    try coordinator.apply(
+      adjustment: adjustmentA,
+      to: [display.id.stableID],
+      timing: .manual,
+      at: start
+    )
+    _ = try coordinator.advanceRamp(at: start.addingTimeInterval(0.4))
+    let midTable = driver.applyCalls.last!.1
+
+    let retargetAt = start.addingTimeInterval(0.4)
+    try coordinator.apply(
+      adjustment: adjustmentB,
+      to: [display.id.stableID],
+      timing: .manual,
+      at: retargetAt
+    )
+    _ = try coordinator.advanceRamp(at: retargetAt.addingTimeInterval(0.1))
+
+    let frame = driver.applyCalls.last!.1
+    let targetB = DisplayTransform.apply(adjustment: adjustmentB, to: baseline)
+    XCTAssertLessThan(frame.green.last!, midTable.green.last!)
+    XCTAssertGreaterThan(frame.green.last!, targetB.green.last!)
+    XCTAssertLessThan(frame.blue.last!, midTable.blue.last!)
+    XCTAssertGreaterThan(frame.blue.last!, targetB.blue.last!)
+  }
+
+  func testPauseRampRestoresBaselineExactly() throws {
+    let display = DisplayDescriptor.testDisplay(stableID: "display-a", runtimeID: 10)
+    let baseline = try RGBTransferTable.identity(samples: 3)
+    let driver = FakeDisplayDriver(displays: [display], baselines: [display.id.stableID: baseline])
+    let coordinator = DisplayCoordinator(driver: driver)
+    let adjustment = DisplayAdjustment(kelvin: 3_000, brightness: 0.8)
+    let start = Date(timeIntervalSince1970: 4_000)
+
+    try coordinator.refreshDisplays()
+    try coordinator.apply(adjustment: adjustment, to: [display.id.stableID])
+    driver.applyCalls.removeAll()
+    try coordinator.pause(timing: .manual, at: start)
+
+    XCTAssertTrue(driver.applyCalls.isEmpty)
+    let done = try coordinator.advanceRamp(at: start.addingTimeInterval(0.8))
+    XCTAssertFalse(done.isLive)
+    XCTAssertEqual(driver.applyCalls.last!.1, baseline)
+    XCTAssertEqual(coordinator.mode, .paused([display.id.stableID: adjustment]))
+  }
+
+  func testAdvanceRampFailureClearsRampsAndThrows() throws {
+    let display = DisplayDescriptor.testDisplay(stableID: "display-a", runtimeID: 10)
+    let baseline = try RGBTransferTable.identity(samples: 3)
+    let driver = FakeDisplayDriver(displays: [display], baselines: [display.id.stableID: baseline])
+    let coordinator = DisplayCoordinator(driver: driver)
+    let start = Date(timeIntervalSince1970: 5_000)
+
+    try coordinator.refreshDisplays()
+    try coordinator.apply(
+      adjustment: DisplayAdjustment(kelvin: 3_000, brightness: 0.8),
+      to: [display.id.stableID],
+      timing: .manual,
+      at: start
+    )
+    driver.applyFailureStableIDs = [display.id.stableID]
+
+    XCTAssertThrowsError(try coordinator.advanceRamp(at: start.addingTimeInterval(0.4)))
+    XCTAssertEqual(coordinator.mode, .idle)
+
+    driver.applyFailureStableIDs = []
+    let status = try coordinator.advanceRamp(at: start.addingTimeInterval(0.5))
+    XCTAssertFalse(status.isLive)
+  }
+
+  func testSuggestedIntervalIsShortForManualAndLongForSchedule() throws {
+    let display = DisplayDescriptor.testDisplay(stableID: "display-a", runtimeID: 10)
+    let baseline = try RGBTransferTable.identity(samples: 3)
+    let driver = FakeDisplayDriver(displays: [display], baselines: [display.id.stableID: baseline])
+    let coordinator = DisplayCoordinator(driver: driver)
+    let adjustment = DisplayAdjustment(kelvin: 3_000, brightness: 0.8)
+    let start = Date(timeIntervalSince1970: 6_000)
+
+    try coordinator.refreshDisplays()
+    try coordinator.apply(adjustment: adjustment, to: [display.id.stableID], timing: .manual, at: start)
+    let manualStatus = try coordinator.advanceRamp(at: start.addingTimeInterval(0.1))
+    XCTAssertEqual(manualStatus.nextInterval, 1.0 / 30, accuracy: 1e-9)
+
+    _ = try coordinator.advanceRamp(at: start.addingTimeInterval(0.8))
+    try coordinator.apply(
+      adjustment: DisplayAdjustment(kelvin: 4_000, brightness: 0.9),
+      to: [display.id.stableID],
+      timing: .schedule,
+      at: start.addingTimeInterval(1)
+    )
+    let scheduleStatus = try coordinator.advanceRamp(at: start.addingTimeInterval(1.5))
+    XCTAssertEqual(scheduleStatus.nextInterval, 0.25, accuracy: 1e-9)
+  }
 }
 
 private final class FakeDisplayDriver: DisplayDriver {
