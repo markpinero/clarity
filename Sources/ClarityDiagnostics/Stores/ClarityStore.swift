@@ -86,6 +86,13 @@ final class ClarityStore: ObservableObject {
   private let activeApplicationMonitor: ActiveApplicationMonitor
   private let globalHotKeyMonitor: GlobalHotKeyMonitor
   private var wakeObservers: [NSObjectProtocol] = []
+  private lazy var displayWakeRecovery = DisplayWakeRecovery { [weak self] in
+    self?.refreshDisplays(
+      reason: "System or displays woke",
+      forceApply: true,
+      timing: .instant
+    )
+  }
   private var scheduleTimer: Timer?
   private var rampTimer: Timer?
   private var started = false
@@ -430,6 +437,7 @@ final class ClarityStore: ObservableObject {
     let center = NSWorkspace.shared.notificationCenter
     wakeObservers.forEach(center.removeObserver)
     wakeObservers.removeAll()
+    displayWakeRecovery.cancel()
 
     do {
       try coordinator.reset(timing: .instant)
@@ -652,8 +660,7 @@ final class ClarityStore: ObservableObject {
     wakeObservers = names.map { name in
       center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
         Task { @MainActor [weak self] in
-          self?.refreshDisplays(
-            reason: "System or displays woke", forceApply: true, timing: .instant)
+          self?.displayWakeRecovery.start()
         }
       }
     }

@@ -8,3 +8,4 @@ Tools/
 script/legacy_iris_light_oracle.sh
 docs/*
 !docs/releasing.md
+.env

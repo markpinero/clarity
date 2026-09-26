@@ -10,7 +10,7 @@ MIN_SYSTEM_VERSION="13.0"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_CONFIGURATION="${CLARITY_BUILD_CONFIGURATION:-debug}"
-CODESIGN_IDENTITY="${CLARITY_CODESIGN_IDENTITY:--}"
+CODESIGN_IDENTITY="${CLARITY_CODESIGN_IDENTITY:-}"
 RELEASE_VERSION="${CLARITY_RELEASE_VERSION:-0.1.0-dev}"
 DIST_DIR="${CLARITY_DIST_DIR:-$ROOT_DIR/dist}"
 
@@ -18,6 +18,13 @@ if [[ "$MODE" == "--release" || "$MODE" == "release" ]]; then
   BUILD_CONFIGURATION="release"
   RELEASE_VERSION="${CLARITY_RELEASE_VERSION:-0.1.0}"
   DIST_DIR="${CLARITY_DIST_DIR:-$ROOT_DIR/dist/release}"
+  CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
+else
+  CODESIGN_IDENTITY="${CODESIGN_IDENTITY:-Apple Development}"
+  if [[ "$CODESIGN_IDENTITY" != Apple\ Development* ]]; then
+    echo "Development bundles require an Apple Development signing identity." >&2
+    exit 1
+  fi
 fi
 
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
@@ -137,6 +144,16 @@ PLIST
       --sign "$CODESIGN_IDENTITY" \
       --entitlements "$ENTITLEMENTS_PLIST" \
       "$APP_BUNDLE" >/dev/null
+  fi
+
+  /usr/bin/codesign --verify --deep --strict "$APP_BUNDLE"
+  if [[ "$MODE" != "--release" && "$MODE" != "release" ]]; then
+    local signing_authority
+    signing_authority="$(/usr/bin/codesign -dv --verbose=4 "$APP_BUNDLE" 2>&1 | /usr/bin/sed -n 's/^Authority=//p' | /usr/bin/head -1)"
+    if [[ "$signing_authority" != Apple\ Development:* ]]; then
+      echo "Development bundle was not signed by an Apple Development certificate." >&2
+      exit 1
+    fi
   fi
 }
 
